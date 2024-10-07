@@ -10,8 +10,8 @@ surface_variables:
   - 10m_u_component_of_wind
   - 10m_v_component_of_wind
   - mean_sea_level_pressure
-  - sst # additional
-  - tp # additional
+  - sea_surface_temperature # additional
+  - total_precipitation_6hr # additional
 atmospheric_variables:
   - temperature
   - u_component_of_wind
@@ -42,4 +42,7 @@ climatology_years:
 eval_years:
   - 2021
   - 2022
-compute_std_to_mean_climatology: true
+compute_quantile: true
+quantile_variables:
+  - t2m
+verbose: true

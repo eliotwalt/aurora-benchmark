@@ -12,12 +12,13 @@ setup(
         "h5netcdf",
         "dask",
         "xarray[complete]",
-        "microsoft-aurora"
+        "microsoft-aurora",
+        "gcsfs"
     ],
     python_requires='>=3.10',
-    author='Your Name',
+    author='Eliot Walt',
     author_email='walt.eliot@hotmail.com',
-    description='A description of your package',
+    description='A package to evaluate Microsoft\'s Aurora on reanalysis data',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/eliotwalt/aurora-benchmark',

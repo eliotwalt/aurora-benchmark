@@ -1,6 +1,6 @@
 import aurora
 
-from utils import XRBatch 
+from aurora_benchmark.batch import XRBatch 
 
 def aurora_forecast(
     era5_path: str,

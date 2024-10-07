@@ -10,3 +10,5 @@ venv/
 
 local.yaml
 snellius.yaml
+
+data/
