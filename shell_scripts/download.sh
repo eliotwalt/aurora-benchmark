@@ -10,7 +10,7 @@ num_jobs=$(python ./py_scripts/task_array.py $DOWNLOAD_CONFIG)
 ./env/modules_cpu.sh
 
 # activate environment
-./shell_scripts/activate_cpu.sh --cpu
+./shell_scripts/load_env.sh --cpu
 
 # download data with python script
 sbatch --cpus-per-task=1 --mem=32G --time=6:00:00 --output=./logs/%A_%a.out \
