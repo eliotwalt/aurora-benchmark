@@ -12,7 +12,7 @@ surface_variables:
   - mean_sea_level_pressure
   - sea_surface_temperature # additional
   - total_precipitation_6hr # additional
-atmospheric_variables:
+atmospheric_variables: 
   - temperature
   - u_component_of_wind
   - v_component_of_wind
@@ -44,5 +44,5 @@ eval_years:
   - 2022
 compute_quantile: true
 quantile_variables:
-  - t2m
+  - 2m_temperature
 verbose: true

@@ -4,6 +4,7 @@ import yaml
 import logging
 
 from aurora_benchmark.download import download_era5_wb2
+from .task_array import get_job_config
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -29,6 +30,11 @@ args = p.parse_args()
 download_config = args.download_config
 host_config = args.host_config
 
+# add data root specific to the host
 download_config["output_dir"] = os.path.join(host_config["data_root_dir"], download_config["output_dir"])
 
+# check whether we are running in a slurm array job
+if os.environ.get("SLURM_ARRAY_TASK_ID", None) is not None:
+    task_id = int(os.environ["SLURM_ARRAY_TASK_ID"])
+    download_config = get_job_config(download_config, task_id)
 download_era5_wb2(**download_config)

@@ -3,10 +3,12 @@ import xarray as xr
 import os, sys 
 import logging 
 from scipy.stats import norm
+import gcsfs
 
 from aurora_benchmark.utils import compute_climatology, resample_dataset, xr_to_netcdf
 
 logger = logging.getLogger(__name__)
+fs = gcsfs.GCSFileSystem(anon=True)
 
 AURORA_VARIABLE_NAMES_MAP = {
     'surface': {
@@ -60,7 +62,7 @@ def download_era5_wb2(
     # extract base_frequency and spatial_resolution from 
     # gs_url = gs://weatherbench2/datasets/era5/{year1}-{year2}-{base_frequency}-{spatial_resolution}_{other_things}.zarr
     base_frequency = gs_url.split('/')[-1].split('-')[2]
-    spatial_resolution = gs_url.split('/')[-1].split('-')[3].split('_')[0] 
+    spatial_resolution = gs_url.split('/')[-1].split('-')[3].split('_')[0].split(".")[0] 
     
     # split years
     climatology_ds = era5_ds.sel(time=slice(f'{climatology_years[0]}', f'{climatology_years[1]}'))
@@ -83,8 +85,6 @@ def download_era5_wb2(
     surface_eval_ds = surface_eval_ds.rename(AURORA_VARIABLE_NAMES_MAP['surface'])
     atmospheric_eval_ds = atmospheric_eval_ds.rename(AURORA_VARIABLE_NAMES_MAP['atmospheric'])
     static_ds = static_ds.rename(AURORA_VARIABLE_NAMES_MAP['static'])
-    if not isinstance(static_ds, xr.Dataset):
-        static_ds = static_ds.to_dataset()
 
     # merge the eval, climatology, and static datasets
     verbose_print(verbose, "Merging datasets...")
@@ -105,7 +105,7 @@ def download_era5_wb2(
                 output_dir, 
                 f'{variable_name}_static-{spatial_resolution}.nc'
             ),
-            precision="float16",
+            precision="float32",
             compression_level=0,
             sort_time=False
         )
@@ -137,7 +137,7 @@ def download_era5_wb2(
                 for sub in AURORA_VARIABLE_NAMES_MAP.values():
                     for aurora_variable_name, era5_variable_name in sub.items():
                         if aurora_variable_name == variable_name:
-                            variable_name == era5_variable_name
+                            variable_name = era5_variable_name
                             ok = True
                             break
                 if not ok: raise ValueError(f"Variable {variable_name} not found in AURORA_VARIABLE_NAMES_MAP")
@@ -159,9 +159,9 @@ def download_era5_wb2(
                 resampled_eval_ds[variable_name],
                 os.path.join(
                     output_dir, 
-                    f'{variable_name}_{eval_years[0]}-{eval_years[1]}-{base_frequency}-{resampling_frequency}-{spatial_resolution}.nc'
+                    f'{variable_name}_{eval_years[0]}-{eval_years[1]}-{base_frequency}-{resampling_frequency.lower()}-{spatial_resolution}.nc'
                 ),
-                precision="float16",
+                precision="float32",
                 compression_level=0,
                 sort_time=True
             )
@@ -174,9 +174,9 @@ def download_era5_wb2(
                 resampled_climatology_ds[variable_name],
                 os.path.join(
                     output_dir_climatology, 
-                    f'climatology_{variable_name}_{climatology_years[0]}-{climatology_years[1]}-{base_frequency}-{resampling_frequency}-{spatial_resolution}.nc'
+                    f'climatology_{variable_name}_{climatology_years[0]}-{climatology_years[1]}-{base_frequency}-{resampling_frequency.lower()}-{spatial_resolution}.nc'
                 ),
-                precision="float16",
+                precision="float32",
                 compression_level=0,
                 sort_time=True
             )

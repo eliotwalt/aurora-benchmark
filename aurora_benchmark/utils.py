@@ -2,9 +2,6 @@ import xarray as xr
 import pandas as pd
 import numpy as np
 import os
-import gcsfs
-
-fs = gcsfs.GCSFileSystem(anon=True)
 
 def resample_dataset(ds: xr.Dataset, frequency: str) -> xr.Dataset:
     """
@@ -86,32 +83,21 @@ def xr_to_netcdf(
     compression_level: int=0, 
     sort_time: bool=True
 ) -> None:
+    if isinstance(dataset, xr.DataArray):
+        dataset = dataset.to_dataset()
+    
     encode_cfg = {"dtype": precision, "zlib": True}
-    if compression_level > 0:
-        encode_cfg["complevel"] = compression_level
-    
-    # Sort by time if required
-    if sort_time and "time" in dataset.dims:
+    if compression_level > 0: encode_cfg["complevel"] = compression_level
+    # sort
+    if sort_time:
         dataset = dataset.sortby("time")
-    
-    # Update encoding
+    # update encoding
     encoding = {}
-    if isinstance(dataset, xr.Dataset):
-        variables = list(dataset.data_vars) + list(dataset.coords)
-    elif isinstance(dataset, xr.DataArray):
-        variables = [dataset.name] + list(dataset.coords)
-    
-    for var in variables:
-        # Do not touch temporal dimensions
-        if np.issubdtype(dataset[var].dtype, np.number):
-            if var in encoding:
-                encoding[var].update(encode_cfg)
-            else:
-                encoding[var] = encode_cfg
-    
-    # Remove existing file if it exists
-    if os.path.exists(path):
-        os.remove(path)
-    
-    # Save to NetCDF
+    for dims in [dataset.data_vars, dataset.coords]:
+        for var in dims:
+            # do not touch temporal dimensions
+            if np.issubdtype(dataset[var].dtype, np.number):
+                if var in encoding: encoding[var].update(encode_cfg)
+                else: encoding[var] = encode_cfg
+    if os.path.exists(path): os.remove(path)
     dataset.to_netcdf(path, engine="netcdf4", encoding=encoding)
