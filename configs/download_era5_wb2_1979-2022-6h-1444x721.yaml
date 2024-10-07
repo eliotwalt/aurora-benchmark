@@ -1,0 +1,45 @@
+gs_url: gs://weatherbench2/datasets/era5/1959-2022-6h-1440x721.zarr
+output_dir: data/era5_wb2/2021-2022-6h-1444x721/ #{varialble_name}-{frequency}.nc
+output_dir_climatology: data/era5_wb2_climatology/2021-2022-6h-1444x721/ #{varialble_name}-{mean|std}-{frequency}.nc
+static_variables:
+  - geopotential
+  - land_sea_mask
+  - soil_type
+surface_variables:
+  - 2m_temperature
+  - 10m_u_component_of_wind
+  - 10m_v_component_of_wind
+  - mean_sea_level_pressure
+  - sst # additional
+  - tp # additional
+atmospheric_variables:
+  - temperature
+  - u_component_of_wind
+  - v_component_of_wind
+  - specific_humidity
+  - geopotential
+pressure_levels:
+  - 50
+  - 100
+  - 150
+  - 200
+  - 250
+  - 300
+  - 400
+  - 500
+  - 600
+  - 700
+  - 850
+  - 925
+  - 1000
+resampling_frequencies:
+  - 6H
+  - 1D
+  - 1W
+climatology_years:
+  - 1979
+  - 2020
+eval_years:
+  - 2021
+  - 2022
+compute_std_to_mean_climatology: true
