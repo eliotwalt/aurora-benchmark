@@ -2,6 +2,13 @@ import xarray as xr
 import pandas as pd
 import numpy as np
 import os
+import logging
+
+logger = logging.getLogger(__name__)
+
+def verbose_print(verbose: bool, message: str) -> None:
+    if verbose:
+        logger.info(message)
 
 def resample_dataset(ds: xr.Dataset, frequency: str) -> xr.Dataset:
     """
@@ -113,7 +120,7 @@ def xr_to_netcdf(
         dataset = dataset.sortby("time")
     
     # encoding 
-    enc = {"dtype": precision, "zlib": True}
+    enc = {"dtype": precision, "zlib": compression_level > 0}
     if compression_level > 0: enc["complevel"] = compression_level
     encoding = {k: enc for k in dataset.data_vars}
 

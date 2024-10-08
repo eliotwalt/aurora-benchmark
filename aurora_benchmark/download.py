@@ -1,12 +1,16 @@
+import dask
 import xarray as xr
-import os, sys
+import os
 import logging 
 
 from aurora_benchmark.utils import (
     compute_climatology, 
     xr_to_netcdf,
-    rename_xr_variables
+    rename_xr_variables,
+    verbose_print
 )
+
+dask.config.set(scheduler='threads')
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +33,6 @@ AURORA_VARIABLE_NAMES_MAP = {
     'land_sea_mask': 'lsm',
     'soil_type': 'stype',
 }
-
-def verbose_print(verbose: bool, message: str) -> None:
-    if verbose:
-        logger.info(message)
 
 def download_era5_wb2(
     gs_url: str,
@@ -58,7 +58,10 @@ def download_era5_wb2(
     
     # open era5 zarr
     verbose_print(verbose, "Opening ERA5 dataset...")
-    era5_ds = xr.open_zarr(gs_url, consolidated=True)
+    era5_ds = xr.open_zarr(
+        gs_url, consolidated=True,
+        chunks={"time": 100, "latitude": 721, "longitude": 1440}
+    )
     
     # extract base_frequency and spatial_resolution from 
     # gs_url = gs://weatherbench2/datasets/era5/{year1}-{year2}-{base_frequency}-{spatial_resolution}_{other_things}.zarr
@@ -121,7 +124,7 @@ def download_era5_wb2(
                     f'{variable_name}_static-{spatial_resolution}.nc'
                 ),
                 precision="float32",
-                compression_level=4,
+                compression_level=0,
                 sort_time=False,
                 exist_ok=True
             )
@@ -138,7 +141,7 @@ def download_era5_wb2(
                     f'{variable_name}_{eval_years[0]}-{eval_years[1]}-{base_frequency}-{spatial_resolution}.nc'
                 ),
                 precision="float32",
-                compression_level=4,
+                compression_level=1,
                 sort_time=False,
                 exist_ok=True
             )
@@ -170,7 +173,7 @@ def download_era5_wb2(
                     f'climatology_{variable_name}_{climatology_years[0]}-{climatology_years[1]}-{base_frequency}-{climatology_frequency.lower()}-{spatial_resolution}.nc'
                 ),
                 precision="float32",
-                compression_level=4,
+                compression_level=0,
                 sort_time=False,
                 exist_ok=True
             )
