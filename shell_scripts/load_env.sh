@@ -4,13 +4,21 @@
 # --cpu: load cpu modules
 # --gpu: load gpu modules
 
+flag_provided=""
+
 while [ "$1" != "" ]; do
     case $1 in
         --cpu )             shift
-                            source ./env/modules_cpu.sh
+                            echo "Loading CPU modules"
+                            flag_provided="cpu"
+                            ./env/modules_cpu.sh
+                            source ./env/venv_cpu/bin/activate
                             ;;
         --gpu )             shift
-                            source ./env/modules_gpu.sh
+                            echo "Loading GPU modules"
+                            flag_provided="gpu"
+                            ./env/modules_gpu.sh
+                            source ./env/venv_gpu/bin/activate
                             ;;
         * )                 echo "Invalid option"
                             exit 1
@@ -19,10 +27,8 @@ while [ "$1" != "" ]; do
 done
 
 # ensure at least --gpu or --cpu is provided
-if [ -z "$1" ]; then
+if [ -z "$flag_provided" ]; then
     echo "Please provide at least one of the following options: --cpu, --gpu"
     exit 1
 fi
 
-# activate environment
-source ./env/venv/bin/activate

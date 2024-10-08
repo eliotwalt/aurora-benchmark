@@ -15,6 +15,6 @@ source ./env/venv/bin/activate
 
 # download data with python script
 sbatch --cpus-per-task=1 --mem=32G --time=6:00:00 --output=./logs/download/%A_%a.out \
-    --error=./logs/%A_%a.err --job-name=dl_era5_wb2 --partition=staging \
+    --error=./logs/download/%A_%a.out --job-name=dl_era5_wb2 --partition=staging \
     --array=0-$((num_jobs-1))%1 \
     --wrap="python ./py_scripts/download.py --download_config $DOWNLOAD_CONFIG --host_config $HOST_CONFIG"
