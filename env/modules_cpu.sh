@@ -1,4 +1,5 @@
 module load 2023
+module load Python/3.11.3-GCCcore-12.3.0
 module load PyTorch/2.1.2-foss-2023a
 module load dask/2023.9.2-foss-2023a
 module load netcdf4-python/1.6.4-foss-2023a

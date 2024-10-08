@@ -6,12 +6,8 @@ HOST_CONFIG=./configs/snellius.yaml
 # compute num jobs
 num_jobs=$(python ./py_scripts/task_array.py $DOWNLOAD_CONFIG)
 
-# load modules
-./env/modules_cpu.sh
-
 # activate environment
-# ./shell_scripts/load_env.sh --cpu # TODO: this does not work
-source ./env/venv/bin/activate
+./shell_scripts/load_env.sh --cpu
 
 # download data with python script
 sbatch --cpus-per-task=1 --mem=32G --time=6:00:00 --output=./logs/download/%A_%a.out \
