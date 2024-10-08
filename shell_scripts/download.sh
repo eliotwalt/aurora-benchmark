@@ -6,8 +6,6 @@ HOST_CONFIG=./configs/snellius.yaml
 # activate CPU environment
 ./env/modules_cpu.sh
 source ./env/venv_cpu/bin/activate
-pyversion=$(python --version)
-echo "Python version: $pyversion"
 
 # compute num jobs
 num_jobs=$(python ./py_scripts/task_array.py $DOWNLOAD_CONFIG)
@@ -16,4 +14,4 @@ num_jobs=$(python ./py_scripts/task_array.py $DOWNLOAD_CONFIG)
 sbatch --cpus-per-task=1 --mem=32G --time=6:00:00 --output=./logs/download/%A_%a.out \
     --error=./logs/download/%A_%a.out --job-name=dl_era5_wb2 --partition=staging \
     --array=0-$((num_jobs-1))%1 \
-    --wrap="python ./py_scripts/download.py --download_config $DOWNLOAD_CONFIG --host_config $HOST_CONFIG"
+    --wrap="./env/modules_cpu.sh && source ./env/venv_cpu/bin/activate  && python ./py_scripts/download.py --download_config $DOWNLOAD_CONFIG --host_config $HOST_CONFIG"
