@@ -13,7 +13,8 @@ setup(
         "dask",
         "xarray[complete]",
         "microsoft-aurora",
-        "gcsfs"
+        "gcsfs",
+        "PyYAML",
     ],
     python_requires='>=3.10',
     author='Eliot Walt',
