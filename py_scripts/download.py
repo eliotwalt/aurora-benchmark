@@ -34,6 +34,7 @@ host_config = args.host_config
 
 # add data root specific to the host
 download_config["output_dir"] = os.path.join(host_config["data_root_dir"], download_config["output_dir"])
+download_config["output_dir_climatology"] = os.path.join(host_config["data_root_dir"], download_config["output_dir_climatology"])
 
 # check whether we are running in a slurm array job
 if os.environ.get("SLURM_ARRAY_TASK_ID", None) is not None:
