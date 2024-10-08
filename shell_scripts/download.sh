@@ -5,7 +5,7 @@ HOST_CONFIG=./configs/snellius.yaml
 
 # activate CPU environment
 ./env/modules_cpu.sh
-./env/venv_cpu/bin/activate
+source ./env/venv_cpu/bin/activate
 pyversion=$(python --version)
 echo "Python version: $pyversion"
 
