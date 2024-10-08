@@ -3,8 +3,9 @@
 DOWNLOAD_CONFIG=./configs/download_era5_wb2_1979-2022-6h-1444x721.yaml
 HOST_CONFIG=./configs/snellius.yaml
 
-# activate environment
-./shell_scripts/load_env.sh --cpu
+# activate CPU environment
+./env/modules_cpu.sh
+./env/venv_cpu/bin/activate
 pyversion=$(python --version)
 echo "Python version: $pyversion"
 
