@@ -6,7 +6,7 @@ HOST_CONFIG=./configs/snellius.yaml
 # activate environment
 ./shell_scripts/load_env.sh --cpu
 pyversion=$(python --version)
-echo "Loaded CPU env ($pyversion)"
+echo "Python version: $pyversion"
 
 # compute num jobs
 num_jobs=$(python ./py_scripts/task_array.py $DOWNLOAD_CONFIG)

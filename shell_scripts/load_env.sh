@@ -32,3 +32,6 @@ if [ -z "$flag_provided" ]; then
     exit 1
 fi
 
+# check if python is loaded
+pyversion=$(python --version)
+echo "Python version: $pyversion"
