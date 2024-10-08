@@ -48,9 +48,10 @@ def download_era5_wb2(
     verbose: bool = True
 ) -> None:    
     
-    print(f" **** DEBUG **** static_variables: {static_variables}")
-    print(f" **** DEBUG **** surface_variables: {surface_variables}")
-    print(f" **** DEBUG **** atmospheric_variables: {atmospheric_variables}")
+    verbose_print(verbose, "Downloading ERA5 data from WeatherBench2...")
+    verbose_print(verbose, f" * static_variables: {static_variables}")
+    verbose_print(verbose, f" * surface_variables: {surface_variables}")
+    verbose_print(verbose, f" * atmospheric_variables: {atmospheric_variables}")
     
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(output_dir_climatology, exist_ok=True)

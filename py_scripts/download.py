@@ -6,7 +6,7 @@ import logging
 from aurora_benchmark.download import download_era5_wb2
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from py_scripts.task_array import get_job_config
+from py_scripts.download_task_array import get_job_config
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
