@@ -1,10 +1,12 @@
-import os
+import os, sys
 import argparse
 import yaml
 import logging
 
 from aurora_benchmark.download import download_era5_wb2
-from .task_array import get_job_config
+
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+from py_scripts.task_array import get_job_config
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)

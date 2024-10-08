@@ -81,7 +81,8 @@ def xr_to_netcdf(
     dataset: xr.Dataset | xr.DataArray, 
     path: str, precision: str, 
     compression_level: int=0, 
-    sort_time: bool=True
+    sort_time: bool=True,
+    exist_ok: bool=False
 ) -> None:
     """
     Write an xarray dataset to a netCDF file.
@@ -98,23 +99,25 @@ def xr_to_netcdf(
         sort_time: bool
             Whether to sort the dataset by time before writing. Defaults to True.
     """
+    if os.path.exists(path):
+        if exist_ok:
+            os.remove(path)
+        else:
+            raise FileExistsError(f"File already exists: {path}")
+        
     if isinstance(dataset, xr.DataArray):
         dataset = dataset.to_dataset()
     
-    encode_cfg = {"dtype": precision, "zlib": True}
-    if compression_level > 0: encode_cfg["complevel"] = compression_level
     # sort
     if sort_time:
         dataset = dataset.sortby("time")
-    # update encoding
-    encoding = {}
-    for dims in [dataset.data_vars, dataset.coords]:
-        for var in dims:
-            # do not touch temporal dimensions
-            if np.issubdtype(dataset[var].dtype, np.number):
-                if var in encoding: encoding[var].update(encode_cfg)
-                else: encoding[var] = encode_cfg
-    if os.path.exists(path): os.remove(path)
+    
+    # encoding 
+    enc = {"dtype": precision, "zlib": True}
+    if compression_level > 0: enc["complevel"] = compression_level
+    encoding = {k: enc for k in dataset.data_vars}
+
+    # write
     dataset.to_netcdf(path, engine="netcdf4", encoding=encoding)
     
 def rename_xr_variables(ds: xr.Dataset, variable_names_map: dict[str, str]) -> xr.Dataset:
@@ -134,7 +137,6 @@ def rename_xr_variables(ds: xr.Dataset, variable_names_map: dict[str, str]) -> x
     
     # intersect variables
     variable_names_map = {k: v for k, v in variable_names_map.items() if k in ds.data_vars}
-    print(variable_names_map)
     
     # rename
     renamed_ds = ds.rename(variable_names_map)

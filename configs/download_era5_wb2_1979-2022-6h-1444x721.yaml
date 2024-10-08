@@ -32,7 +32,7 @@ pressure_levels:
   - 850
   - 925
   - 1000
-resampling_frequencies:
+climatology_frequencies:
   - 1W
 climatology_years:
   - 1979
@@ -40,7 +40,4 @@ climatology_years:
 eval_years:
   - 2021
   - 2022
-compute_quantile: true
-quantile_variables:
-  - 2m_temperature
 verbose: true

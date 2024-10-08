@@ -1,67 +1,77 @@
 import yaml
 import sys
 
-def count_jobs(config_path):
-    with open(config_path, 'r') as file:
-        config = yaml.safe_load(file)
+def count_jobs(config: str|dict):
+    """
+    Count the number of jobs as defined by the configuration file.
     
-    resampling_frequencies = config['resampling_frequencies']
-    num_resampling_frequencies = len(resampling_frequencies)
+    There will be 1 job for each climatology frequency and variable combination.
+    """
+    if isinstance(config, str):
+        with open(config, 'r') as file:
+            config = yaml.safe_load(file)
+        
+    climatology_frequencies = config['climatology_frequencies']
+    num_climatology_frequencies = len(climatology_frequencies)
     
-    min_variables = min(
+    num_variables = sum([
         len(config.get('static_variables', [])),
         len(config.get('surface_variables', [])),
         len(config.get('atmospheric_variables', []))
-    )
+    ])
     
-    return num_resampling_frequencies * min_variables  # +1 for the last sub-config with all remaining variables
+    return num_climatology_frequencies * num_variables
 
-def get_job_config(config, task_id):
-    resampling_frequencies = config['resampling_frequencies']
-    num_resampling_frequencies = len(resampling_frequencies)
+def get_job_config(config: str|dict, task_id):
+    """
+    Creates a sub-config for a specific job.
     
-    static_vars = config.get('static_variables', [])
-    surface_vars = config.get('surface_variables', [])
-    atmospheric_vars = config.get('atmospheric_variables', [])
-    
-    min_variables = min(len(static_vars), len(surface_vars), len(atmospheric_vars))
-    total_jobs = num_resampling_frequencies * min_variables + 1
-    
+    Each subconfig contains a single climatology frequency and variable combination.
+    """
+    if isinstance(config, str):
+        with open(config, 'r') as file:
+            config = yaml.safe_load(file)
+            
+    total_jobs = count_jobs(config)
+    num_climatology_frequencies = len(config['climatology_frequencies'])
+        
     if task_id >= total_jobs:
         raise ValueError("task_id is out of range")
     
-    if task_id == total_jobs - 1:
-        # Last sub-config with all remaining variables
-        sub_config = {
-            **config,
-            'resampling_frequencies': resampling_frequencies,
-            'static_variables': static_vars[min_variables-1:],
-            'surface_variables': surface_vars[min_variables-1:],
-            'atmospheric_variables': atmospheric_vars[min_variables-1:]
-        }
-    else:
-        resampling_index = task_id % num_resampling_frequencies
-        variable_index = task_id // num_resampling_frequencies
+    # compute indexes
+    climatology_index = task_id % num_climatology_frequencies
+    variable_index = task_id // num_climatology_frequencies
+    
+    # get climatology frequency
+    climatology_frequency = config['climatology_frequencies'][climatology_index]
+    
+    # get the variable
+    all_vars = config.get('static_variables', []) + config.get('surface_variables', []) + config.get('atmospheric_variables', [])
+    all_var_types = ["static_variables"] * len(config.get('static_variables', [])) + \
+                    ["surface_variables"] * len(config.get('surface_variables', [])) + \
+                    ["atmospheric_variables"] * len(config.get('atmospheric_variables', []))
         
-        resampling_frequency = resampling_frequencies[resampling_index]
-        
-        sub_config = {
-            **config,
-            'resampling_frequencies': [resampling_frequency],
-            'static_variables': [static_vars[variable_index]],
-            'surface_variables': [surface_vars[variable_index]],
-            'atmospheric_variables': [atmospheric_vars[variable_index]]
-        }
-        
-    # ensure that quantile variables are present
-    for qvar in sub_config.get('quantile_variables', []):
-        if qvar not in sub_config['surface_variables'] + sub_config['atmospheric_variables']:
-            sub_config["quantile_variables"].remove(qvar)
-    if sub_config["compute_quantile"] and len(sub_config["quantile_variables"]) == 0:
-        sub_config["compute_quantile"] = False
+    sub_config = {
+        **config,
+        'climatology_frequencies': [climatology_frequency],
+        'static_variables': [all_vars[variable_index]] if all_var_types[variable_index] == "static_variables" else [],
+        'surface_variables': [all_vars[variable_index]] if all_var_types[variable_index] == "surface_variables" else [],
+        'atmospheric_variables': [all_vars[variable_index]] if all_var_types[variable_index] == "atmospheric_variables" else []
+    }
+
     return sub_config
     
 
-# Example usage
-config_path = sys.argv[1]
-print(count_jobs(config_path))
+if __name__ == "__main__":
+    # Example usage
+    config_path = sys.argv[1]
+    # print(count_jobs(config_path))
+    # with open(config_path, 'r') as file:
+    #     config = yaml.safe_load(file)
+
+    n = count_jobs(config_path)
+    # for i in range(n):
+    #     print(get_job_config(config, i))
+    #     print()
+
+    print(n)

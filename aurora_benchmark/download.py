@@ -1,19 +1,14 @@
-import dask
 import xarray as xr
-import os, sys 
+import os, sys
 import logging 
-from scipy.stats import norm
-import gcsfs
 
 from aurora_benchmark.utils import (
     compute_climatology, 
-    resample_dataset, 
     xr_to_netcdf,
     rename_xr_variables
 )
 
 logger = logging.getLogger(__name__)
-fs = gcsfs.GCSFileSystem(anon=True)
 
 AURORA_VARIABLE_NAMES_MAP = {
     # surface
@@ -52,6 +47,11 @@ def download_era5_wb2(
     eval_years: list[int] = [2021, 2022],
     verbose: bool = True
 ) -> None:    
+    
+    print(f" **** DEBUG **** static_variables: {static_variables}")
+    print(f" **** DEBUG **** surface_variables: {surface_variables}")
+    print(f" **** DEBUG **** atmospheric_variables: {atmospheric_variables}")
+    
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(output_dir_climatology, exist_ok=True)
     
@@ -71,11 +71,26 @@ def download_era5_wb2(
     
     # create sub datasets for each set of variables
     verbose_print(verbose, "Creating sub datasets for surface, atmospheric, and static variables...")
-    surface_clim_ds = climatology_ds[surface_variables]
-    atmospheric_clim_ds = climatology_ds[atmospheric_variables].sel(level=pressure_levels)
-    surface_eval_ds = eval_ds[surface_variables]
-    atmospheric_eval_ds = eval_ds[atmospheric_variables].sel(level=pressure_levels)
-    static_ds = era5_ds[static_variables].isel(time=0, drop=False)
+    if len(static_variables) > 0:
+        static_ds = era5_ds[static_variables]
+        if static_ds.sizes.get("time", 0) > 0:
+            static_ds = static_ds.isel(time=0, drop=True)
+        if isinstance(static_ds, xr.DataArray):
+            static_ds = static_ds.to_dataset()
+    else:
+        static_ds = xr.Dataset()
+    if len(surface_variables) > 0:
+        surface_clim_ds = climatology_ds[surface_variables]
+        surface_eval_ds = eval_ds[surface_variables]
+    else:
+        surface_clim_ds = xr.Dataset()
+        surface_eval_ds = xr.Dataset()
+    if len(atmospheric_variables) > 0: 
+        atmospheric_clim_ds = climatology_ds[atmospheric_variables].sel(level=pressure_levels)
+        atmospheric_eval_ds = eval_ds[atmospheric_variables].sel(level=pressure_levels)
+    else:
+        atmospheric_clim_ds = xr.Dataset()
+        atmospheric_eval_ds = xr.Dataset()
 
     # merge the eval, climatology, and static datasets
     verbose_print(verbose, "Merging datasets...")
@@ -93,35 +108,43 @@ def download_era5_wb2(
     verbose_print(verbose, f"Evaluation dataset: {type(eval_ds)} {eval_ds.sizes}")
     verbose_print(verbose, f"Static dataset: {type(eval_ds)} {static_ds.sizes}")
     
-    # save the static variables to disk
-    # pattern: {output_dir}/{variable_name}_static-{spatial_resolution}.nc
-    verbose_print(verbose, "Saving static dataset to disk...")
-    for variable_name in static_ds.data_vars:
-        xr_to_netcdf(    
-            static_ds[variable_name],
-            os.path.join(
-                output_dir, 
-                f'{variable_name}_static-{spatial_resolution}.nc'
-            ),
-            precision="float32",
-            compression_level=0,
-            sort_time=False
-        )
+    if len(static_ds.data_vars) > 0:
+        # save the static variables to disk
+        # pattern: {output_dir}/{variable_name}_static-{spatial_resolution}.nc
+        verbose_print(verbose, "Saving static dataset to disk...")
+        for variable_name in static_ds.data_vars:
+            xr_to_netcdf(    
+                static_ds[variable_name],
+                os.path.join(
+                    output_dir, 
+                    f'{variable_name}_static-{spatial_resolution}.nc'
+                ),
+                precision="float32",
+                compression_level=4,
+                sort_time=False,
+                exist_ok=True
+            )
         
-    # save the eval dataset to disk
-    # pattern: {variable_name}_{eval_years[0]}-{eval_years[1]}-{base_frequency}-{spatial_resolution}.nc
-    verbose_print(verbose, "Saving evaluation dataset to disk...")
-    for variable_name in eval_ds.data_vars:
-        xr_to_netcdf(    
-            eval_ds[variable_name],
-            os.path.join(
-                output_dir, 
-                f'{variable_name}_{eval_years[0]}-{eval_years[1]}-{base_frequency}-{spatial_resolution}.nc'
-            ),
-            precision="float32",
-            compression_level=0,
-            sort_time=False
-        )
+    if len(eval_ds.data_vars) > 0:
+        # save the eval dataset to disk
+        # pattern: {variable_name}_{eval_years[0]}-{eval_years[1]}-{base_frequency}-{spatial_resolution}.nc
+        verbose_print(verbose, "Saving evaluation dataset to disk...")
+        for variable_name in eval_ds.data_vars:
+            xr_to_netcdf(    
+                eval_ds[variable_name],
+                os.path.join(
+                    output_dir, 
+                    f'{variable_name}_{eval_years[0]}-{eval_years[1]}-{base_frequency}-{spatial_resolution}.nc'
+                ),
+                precision="float32",
+                compression_level=4,
+                sort_time=False,
+                exist_ok=True
+            )
+    
+    if len(climatology_ds.data_vars) == 0:
+        verbose_print(verbose, "No variables to compute climatology on. Returning...")
+        return
     
     # compute climatologies at different frequencies
     for climatology_frequency in climatology_frequencies:
@@ -130,7 +153,7 @@ def download_era5_wb2(
         resampled_climatology_ds = compute_climatology(
             climatology_ds, climatology_frequency,
             resample=True
-        )
+        ).compute()
         
         # print sizes
         verbose_print(verbose, f"{climatology_frequency.lower()} climatology: {resampled_climatology_ds.sizes}")
@@ -146,6 +169,7 @@ def download_era5_wb2(
                     f'climatology_{variable_name}_{climatology_years[0]}-{climatology_years[1]}-{base_frequency}-{climatology_frequency.lower()}-{spatial_resolution}.nc'
                 ),
                 precision="float32",
-                compression_level=0,
-                sort_time=True
+                compression_level=4,
+                sort_time=False,
+                exist_ok=True
             )
