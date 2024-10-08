@@ -1,6 +1,6 @@
 gs_url: gs://weatherbench2/datasets/era5/1959-2022-6h-1440x721.zarr
-output_dir: data/era5_wb2/2021-2022-6h-1444x721/ #{varialble_name}-{frequency}.nc
-output_dir_climatology: data/era5_wb2_climatology/2021-2022-6h-1444x721/ #{varialble_name}-{mean|std}-{frequency}.nc
+output_dir: data/era5_wb2/2021-2022-6h-1444x721/ 
+output_dir_climatology: data/era5_wb2_climatology/2021-2022-6h-1444x721/
 static_variables:
   - geopotential
   - land_sea_mask
@@ -33,8 +33,6 @@ pressure_levels:
   - 925
   - 1000
 resampling_frequencies:
-  - 6H
-  - 1D
   - 1W
 climatology_years:
   - 1979

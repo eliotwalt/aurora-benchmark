@@ -12,3 +12,5 @@ local.yaml
 snellius.yaml
 
 data/
+
+*.draft.*
