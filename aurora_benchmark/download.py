@@ -48,6 +48,17 @@ def download_era5_wb2(
     verbose: bool = True
 ) -> None:    
     
+    # setup slurm with dask
+    if os.environ.get("SLURM_CPUS_PER_TASK", False):
+        slurm = True
+        from dask.distributed import Client, LocalCluster
+        n_cpus = int(os.environ.get("SLURM_CPUS_PER_TASK", 1))
+        cluster = LocalCluster(n_workers=n_cpus, threads_per_worker=1)
+        client = Client(cluster)
+        verbose_print(verbose, f"SLURM detected. Setting up dask with {n_cpus} workers...")
+    else:
+        slurm = False
+    
     verbose_print(verbose, "Downloading ERA5 data from WeatherBench2...")
     verbose_print(verbose, f" * static_variables: {static_variables}")
     verbose_print(verbose, f" * surface_variables: {surface_variables}")
@@ -56,17 +67,17 @@ def download_era5_wb2(
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(output_dir_climatology, exist_ok=True)
     
-    # open era5 zarr
-    verbose_print(verbose, "Opening ERA5 dataset...")
-    era5_ds = xr.open_zarr(
-        gs_url, consolidated=True,
-        chunks={"time": 28, "latitude": 721, "longitude": 1440}
-    )
-    
     # extract base_frequency and spatial_resolution from 
     # gs_url = gs://weatherbench2/datasets/era5/{year1}-{year2}-{base_frequency}-{spatial_resolution}_{other_things}.zarr
     base_frequency = gs_url.split('/')[-1].split('-')[2]
     spatial_resolution = gs_url.split('/')[-1].split('-')[3].split('_')[0].split(".")[0] 
+    
+    # open era5 zarr
+    verbose_print(verbose, "Opening ERA5 dataset...")
+    era5_ds = xr.open_zarr(
+        gs_url, consolidated=True,
+        chunks={"time": 28*5, "latitude": 721, "longitude": 1440}
+    )
     
     # split years
     verbose_print(verbose, "Splitting years...")
@@ -146,34 +157,36 @@ def download_era5_wb2(
                 exist_ok=True
             )
     
-    if len(climatology_ds.data_vars) == 0:
-        verbose_print(verbose, "No variables to compute climatology on. Returning...")
-        return
-    
     # compute climatologies at different frequencies
-    for climatology_frequency in climatology_frequencies:
-        # reasample eval and climatology datasets
-        verbose_print(verbose, f"Computing {climatology_frequency.lower()} climatology...")
-        resampled_climatology_ds = compute_climatology(
-            climatology_ds, climatology_frequency,
-            resample=True
-        ).compute()
-        
-        # print sizes
-        verbose_print(verbose, f"{climatology_frequency.lower()} climatology: {resampled_climatology_ds.sizes}")
-        
-        # save climatology to disk
-        # pattern: {output_dir_climatology}/climatology_{variable_name}_{climatology_years[0]}-{climatology_years[1]}-{mean|std}-{base_frequency}-{climatology_frequency}-{spatial_resolution}.nc
-        verbose_print(verbose, f"Saving {climatology_frequency.lower()} climatology to disk...")
-        for variable_name in resampled_climatology_ds.data_vars:
-            xr_to_netcdf(    
-                resampled_climatology_ds[variable_name],
-                os.path.join(
-                    output_dir_climatology, 
-                    f'climatology_{variable_name}_{climatology_years[0]}-{climatology_years[1]}-{base_frequency}-{climatology_frequency.lower()}-{spatial_resolution}.nc'
-                ),
-                precision="float32",
-                compression_level=0,
-                sort_time=False,
-                exist_ok=True
+    if len(climatology_ds.data_vars) > 0:
+        for climatology_frequency in climatology_frequencies:
+            # reasample eval and climatology datasets
+            verbose_print(verbose, f"Computing {climatology_frequency.lower()} climatology...")
+            resampled_climatology_ds = compute_climatology(
+                climatology_ds, climatology_frequency,
+                resample=True
             )
+            
+            # print sizes
+            verbose_print(verbose, f"{climatology_frequency.lower()} climatology: {resampled_climatology_ds.sizes}")
+            
+            # save climatology to disk
+            # pattern: {output_dir_climatology}/climatology_{variable_name}_{climatology_years[0]}-{climatology_years[1]}-{mean|std}-{base_frequency}-{climatology_frequency}-{spatial_resolution}.nc
+            verbose_print(verbose, f"Saving {climatology_frequency.lower()} climatology to disk...")
+            for variable_name in resampled_climatology_ds.data_vars:
+                xr_to_netcdf(    
+                    resampled_climatology_ds[variable_name],
+                    os.path.join(
+                        output_dir_climatology, 
+                        f'climatology_{variable_name}_{climatology_years[0]}-{climatology_years[1]}-{base_frequency}-{climatology_frequency.lower()}-{spatial_resolution}.nc'
+                    ),
+                    precision="float32",
+                    compression_level=0,
+                    sort_time=False,
+                    exist_ok=True
+                )
+    
+    if slurm:
+        client.close()
+        cluster.close()
+        verbose_print(verbose, "Dask cluster closed.")
