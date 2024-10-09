@@ -226,25 +226,36 @@ class XRAuroraDataset(Dataset):
         # TODO: adapt to any base frequency and init_frequency
         # compute date range that includes all the hours of the last day at the given base frequency (6h currently)
         valid_init = pd.date_range(valid_init[0], valid_init[-1]+np.timedelta64(1,"D")-np.timedelta64(6, "h"), freq="6h")
+        print(f"valid_init: {valid_init}")
         ds = ds.sel(time=valid_init)
+        print(f"ds shape before first_n: {dict(ds.dims)}")
+        print(f"ds.time.values[:2] before first_n: {ds.time.values[:2]}")
         # resample at init_frequency and keep the two first timestamps
         ds = ds.resample(time=self.init_frequency).apply(lambda x: first_n(x, self.num_time_samples))
+        print(f"ds shape after first_n: {dict(ds.dims)}")
+        print(f"ds.time.values[:2] after first_n: {ds.time.values[:2]}")
         # drop the timestep that are at less than forecast_horizon from the end
         forecast_delta = pd.Timedelta(self.forecast_horizon)
         # TODO: adapt to any base frequency and init_frequency
+        dt64_times = ds.time #.values.astype('datetime64[s]').tolist()
         valid_dates = pd.date_range(
-            ds.time.values[0].astype('datetime64[s]'), 
-            ds.time.values[-1].astype('datetime64[s]') - forecast_delta, 
+            dt64_times[0], 
+            dt64_times[-1] - forecast_delta, 
             freq="6h"
         )
-        ds = ds.isel(time=valid_dates)
+        print(f"valid date start: {dt64_times[0]}")
+        print(f"valid date end: {dt64_times[-1]} - {forecast_delta} = {dt64_times[-1] - forecast_delta}")
+        print(f"valid dates: ", valid_dates)
+        ds = ds.sel(time=valid_dates)
+        print(f"ds shape after forecast_horizon thing: {dict(ds.dims)}")
         return ds
         
     def __len__(self) -> int:
         return len(self.sruface_ds.time)-1
     
     def __getitem__(self, idx: int) -> Batch:
-        time_slice = slice(self.ds.time[idx-1], self.ds.time[idx])     
+        print(self.atmospheric_ds.time.values)
+        time_slice = slice(self.surface_ds.time.values[idx], self.surface_ds.time.values[idx-1])     
         return aurora_batch_to_xr(
             self.surface_ds.sel(time=time_slice),
             self.atmospheric_ds.sel(time=time_slice),

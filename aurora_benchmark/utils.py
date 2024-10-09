@@ -140,9 +140,6 @@ def xr_to_netcdf(
             os.remove(path)
         else:
             raise FileExistsError(f"File already exists: {path}")
-        
-    if isinstance(dataset, xr.DataArray):
-        dataset = dataset.to_dataset()
     
     # sort
     if sort_time:
