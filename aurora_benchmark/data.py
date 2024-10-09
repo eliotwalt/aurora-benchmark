@@ -224,6 +224,7 @@ class XRAuroraDataset(Dataset):
         valid_init = n_samples_per_init.where(n_samples_per_init >= self.num_time_samples).dropna(dim="time").time.dt.floor("D").values
         valid_init = np.unique(valid_init)  # Ensure unique dates
         # TODO: adapt to any base frequency and init_frequency
+        # compute date range that includes all the hours of the last day at the given base frequency (6h currently)
         valid_init = pd.date_range(valid_init[0], valid_init[-1]+np.timedelta64(1,"D")-np.timedelta64(6, "h"), freq="6h")
         ds = ds.sel(time=valid_init)
         # resample at init_frequency and keep the two first timestamps
@@ -231,7 +232,11 @@ class XRAuroraDataset(Dataset):
         # drop the timestep that are at less than forecast_horizon from the end
         forecast_delta = pd.Timedelta(self.forecast_horizon)
         # TODO: adapt to any base frequency and init_frequency
-        valid_dates = pd.date_range(ds.time.values[0], ds.time.values[-1] - forecast_delta, freq="6h")
+        valid_dates = pd.date_range(
+            ds.time.values[0].astype('datetime64[s]'), 
+            ds.time.values[-1].astype('datetime64[s]') - forecast_delta, 
+            freq="6h"
+        )
         ds = ds.isel(time=valid_dates)
         return ds
         

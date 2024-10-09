@@ -103,12 +103,8 @@ def download_era5_wb2(
 
     # merge the eval, climatology, and static datasets
     verbose_print(verbose, "Merging datasets...")
-    climatology_ds = xr.concat([surface_clim_ds, atmospheric_clim_ds], dim='variable')
-    eval_ds = xr.concat([surface_eval_ds, atmospheric_eval_ds], dim='variable')
-    # select first dummy variable dim (the rest is nan)
-    if len(atmospheric_variables)+len(surface_variables) > 0:
-        climatology_ds = climatology_ds.isel(variable=0)
-        eval_ds = eval_ds.isel(variable=0)
+    climatology_ds = xr.merge([surface_clim_ds, atmospheric_clim_ds])
+    eval_ds = xr.merge([surface_eval_ds, atmospheric_eval_ds])
     
     # rename variables to match aurora
     verbose_print(verbose, "Renaming variables to match Aurora...")
@@ -147,7 +143,7 @@ def download_era5_wb2(
         for variable_name in eval_ds.data_vars:
             verbose_print(verbose, f"Saving {variable_name} from evaluation dataset to disk...")
             xr_to_netcdf(    
-                eval_ds[variable_name].sel(variable=0),
+                eval_ds[variable_name],
                 os.path.join(
                     output_dir, 
                     f'{variable_name}_{eval_years[0]}-{eval_years[1]}-{base_frequency}-{spatial_resolution}.nc'
