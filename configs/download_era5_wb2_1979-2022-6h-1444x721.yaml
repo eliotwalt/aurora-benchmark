@@ -35,7 +35,7 @@ pressure_levels:
 climatology_frequencies:
   - 1W
 climatology_years:
-  - 1979
+  - 1991
   - 2020
 eval_years:
   - 2021

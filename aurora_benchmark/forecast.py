@@ -35,7 +35,6 @@ def aurora_forecast(
     era5_surface_ds = xr.concat(
         [xr.open_dataset(
             path, engine="netcdf4",
-            consolidated=True, 
             chunks=chunks) 
          for path in era5_surface_paths],
         dim="variable"
