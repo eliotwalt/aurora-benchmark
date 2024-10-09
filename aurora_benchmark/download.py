@@ -101,10 +101,14 @@ def download_era5_wb2(
         atmospheric_clim_ds = xr.Dataset()
         atmospheric_eval_ds = xr.Dataset()
 
-    # merge the eval, climatology, and static datasets (select first dummy variable dim (the rest is nan))
+    # merge the eval, climatology, and static datasets
     verbose_print(verbose, "Merging datasets...")
-    climatology_ds = xr.concat([surface_clim_ds, atmospheric_clim_ds], dim='variable').sel(variable=0)
-    eval_ds = xr.concat([surface_eval_ds, atmospheric_eval_ds], dim='variable').sel(variable=0)
+    climatology_ds = xr.concat([surface_clim_ds, atmospheric_clim_ds], dim='variable')
+    eval_ds = xr.concat([surface_eval_ds, atmospheric_eval_ds], dim='variable')
+    # select first dummy variable dim (the rest is nan)
+    if len(atmospheric_variables)+len(surface_variables) > 0:
+        climatology_ds = climatology_ds.isel(variable=0)
+        eval_ds = eval_ds.isel(variable=0)
     
     # rename variables to match aurora
     verbose_print(verbose, "Renaming variables to match Aurora...")

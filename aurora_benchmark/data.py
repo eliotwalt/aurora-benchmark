@@ -229,11 +229,9 @@ class XRAuroraDataset(Dataset):
         # resample at init_frequency and keep the two first timestamps
         ds = ds.resample(time=self.init_frequency).apply(lambda x: first_n(x, self.num_time_samples))
         # drop the timestep that are at less than forecast_horizon from the end
-        n, f = int(self.forecast_horizon[:-1]), self.forecast_horizon[-1]
-        print(f"n: {n}, f: {f}")
-        np.timedelta64(n, f)
+        forecast_delta = pd.Timedelta(self.forecast_horizon)
         # TODO: adapt to any base frequency and init_frequency
-        valid_dates = pd.date_range(ds.time.values[0], ds.time.values[-1]-np.timedelta64(n, f), freq="6h")
+        valid_dates = pd.date_range(ds.time.values[0], ds.time.values[-1] - forecast_delta, freq="6h")
         ds = ds.isel(time=valid_dates)
         return ds
         
