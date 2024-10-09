@@ -60,7 +60,7 @@ def download_era5_wb2(
     verbose_print(verbose, "Opening ERA5 dataset...")
     era5_ds = xr.open_zarr(
         gs_url, consolidated=True,
-        chunks={"time": 100, "latitude": 721, "longitude": 1440}
+        chunks={"time": 28, "latitude": 721, "longitude": 1440}
     )
     
     # extract base_frequency and spatial_resolution from 
