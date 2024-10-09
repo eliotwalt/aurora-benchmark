@@ -111,6 +111,9 @@ def download_era5_wb2(
     climatology_ds = rename_xr_variables(climatology_ds, AURORA_VARIABLE_NAMES_MAP)
     eval_ds = rename_xr_variables(eval_ds, AURORA_VARIABLE_NAMES_MAP)
     static_ds = rename_xr_variables(static_ds, AURORA_VARIABLE_NAMES_MAP)
+    if percentile_variables:
+        verbose_print(verbose, "Renaming percentile variables to match Aurora...")
+        percentile_variables = [AURORA_VARIABLE_NAMES_MAP[var] for var in percentile_variables]
     
     # print datasets types and sizes
     verbose_print(verbose, f"Climatology dataset: {type(climatology_ds)} {climatology_ds.sizes}")

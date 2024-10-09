@@ -18,6 +18,11 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
+# Suppress logs from Google libraries
+logging.getLogger('google').setLevel(logging.ERROR)
+logging.getLogger('google.auth').setLevel(logging.ERROR)
+logging.getLogger('google.cloud').setLevel(logging.ERROR)
+
 def yaml_file(x):
     try:
         with open(x, "r") as f:
