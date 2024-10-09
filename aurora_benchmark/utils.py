@@ -148,7 +148,10 @@ def xr_to_netcdf(
     # encoding 
     enc = {"dtype": precision, "zlib": compression_level > 0}
     if compression_level > 0: enc["complevel"] = compression_level
-    encoding = {k: enc for k in dataset.data_vars}
+    if isinstance(dataset, xr.Dataset):
+        encoding = {k: enc for k in dataset.data_vars}
+    elif isinstance(dataset, xr.DataArray):
+        encoding = {dataset.name: enc}
 
     # write
     dataset.to_netcdf(path, engine="netcdf4", encoding=encoding)

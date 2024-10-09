@@ -48,27 +48,31 @@ def xr_to_aurora_batch(
     """ 
     inspired by https://microsoft.github.io/aurora/example_era5.html
     """ 
+    # ensure longitudes start at 0
+    longitudes = torch.Tensor(sorted(atmospheric_ds.longitude.values, reverse=False))
+    if longitudes.min() == -180.0:
+        longitudes += 180.0
     return Batch(
         surf_vars = {
-            var: torch.from_numpy(surface_ds[var].values, dtype=torch.float32)
+            var: torch.from_numpy(surface_ds[var].values)
             for var in surface_variables
         },
         atmos_vars = {
-            var: torch.from_numpy(atmospheric_ds[var].values, dtype=torch.float32)
+            var: torch.from_numpy(atmospheric_ds[var].values)
             for var in atmospheric_variables
         },
         static_vars = {
-            var: torch.from_numpy(static_ds[var].values, dtype=torch.float32)
+            var: torch.from_numpy(static_ds[var].values)
             for var in static_variables
         },
         metadata=Metadata(
-            lat=torch.from_numpy(surface_ds.latitude.values),
-            lon=torch.from_numpy(surface_ds.longitude.values),
+            lat=torch.Tensor(sorted(atmospheric_ds.latitude.values, reverse=True)),
+            lon=torch.Tensor(sorted(atmospheric_ds.longitude.values, reverse=False)),
             # Converting to `datetime64[s]` ensures that the output of `tolist()` gives
             # `datetime.datetime`s. Note that this needs to be a tuple of length one:
             # one value for every batch element.
             time=(surface_ds.time.values.astype("datetime64[s]").tolist(),),
-            atmos_levels=tuple(int(level) for level in atmospheric_ds.pressure_level.values),
+            atmos_levels=tuple(int(level) for level in atmospheric_ds.level.values),
         )
     )
 
@@ -212,51 +216,27 @@ class XRAuroraDataset(Dataset):
         of forecast_horizon.
         """
         def first_n(group: xr.Dataset, n: int) -> xr.Dataset:
-            times = group.time.values.astype("datetime64[s]").tolist()
-            if len(times) >= n:
-                 _slice = slice(times[0], times[n-1])
-                 return group.sel(time=_slice)
-            raise IndexError(f"Group has less than {n} samples, times:", times)
+            if len(group.time) < n:
+                # return an empty Dataset with the same structure
+                # that will be discarded by the resample method
+                return group.isel(time=slice(0, 0))
+            return group.isel(time=slice(0, n))
         # ensure sorted
         ds = ds.sortby("time")
-        # select the valid initialisation timestamps (at least num_time_samples)
-        n_samples_per_init = ds.copy().resample(time=self.init_frequency).count()
-        valid_init = n_samples_per_init.where(n_samples_per_init >= self.num_time_samples).dropna(dim="time").time.dt.floor("D").values
-        valid_init = np.unique(valid_init)  # Ensure unique dates
-        # TODO: adapt to any base frequency and init_frequency
-        # compute date range that includes all the hours of the last day at the given base frequency (6h currently)
-        valid_init = pd.date_range(valid_init[0], valid_init[-1]+np.timedelta64(1,"D")-np.timedelta64(6, "h"), freq="6h")
-        print(f"valid_init: {valid_init}")
-        ds = ds.sel(time=valid_init)
-        print(f"ds shape before first_n: {dict(ds.dims)}")
-        print(f"ds.time.values[:2] before first_n: {ds.time.values[:2]}")
-        # resample at init_frequency and keep the two first timestamps
-        ds = ds.resample(time=self.init_frequency).apply(lambda x: first_n(x, self.num_time_samples))
-        print(f"ds shape after first_n: {dict(ds.dims)}")
-        print(f"ds.time.values[:2] after first_n: {ds.time.values[:2]}")
-        # drop the timestep that are at less than forecast_horizon from the end
-        forecast_delta = pd.Timedelta(self.forecast_horizon)
-        # TODO: adapt to any base frequency and init_frequency
-        dt64_times = ds.time #.values.astype('datetime64[s]').tolist()
-        valid_dates = pd.date_range(
-            dt64_times[0], 
-            dt64_times[-1] - forecast_delta, 
-            freq="6h"
-        )
-        print(f"valid date start: {dt64_times[0]}")
-        print(f"valid date end: {dt64_times[-1]} - {forecast_delta} = {dt64_times[-1] - forecast_delta}")
-        print(f"valid dates: ", valid_dates)
-        ds = ds.sel(time=valid_dates)
-        print(f"ds shape after forecast_horizon thing: {dict(ds.dims)}")
+        # resample to keep only the first num_time_samples at each init_frequency
+        timestamps = ds.indexes["time"]
+        ds = ds.resample(time=self.init_frequency).map(first_n, n=self.num_time_samples)
+        ds['time'] = timestamps[ds.time.values]
+        # select the timesteps that are at least forecast_horizon away from the last timestep
+        ds = ds.sel(time=ds.time <= ds.time.max() - pd.Timedelta(self.forecast_horizon))
         return ds
         
     def __len__(self) -> int:
         return len(self.sruface_ds.time)-1
     
     def __getitem__(self, idx: int) -> Batch:
-        print(self.atmospheric_ds.time.values)
         time_slice = slice(self.surface_ds.time.values[idx], self.surface_ds.time.values[idx-1])     
-        return aurora_batch_to_xr(
+        return xr_to_aurora_batch(
             self.surface_ds.sel(time=time_slice),
             self.atmospheric_ds.sel(time=time_slice),
             self.static_ds,

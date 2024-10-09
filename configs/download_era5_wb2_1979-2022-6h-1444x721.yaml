@@ -41,7 +41,7 @@ eval_years:
   - 2021
   - 2022
 verbose: true
-percentiles: [5, 33, 66, 95]
+percentiles: [66, 95, 33, 5]
 percentile_variables:
   - 2m_temperature
   - total_precipitation_6hr

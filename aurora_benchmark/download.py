@@ -168,7 +168,8 @@ def download_era5_wb2(
             )
             
             # print sizes
-            verbose_print(verbose, f"{climatology_frequency.lower()} climatology: {resampled_climatology_ds.sizes}")
+            verbose_print(verbose, f"{climatology_frequency.lower()} climatology sizes: {resampled_climatology_ds.sizes}")
+            verbose_print(verbose, f"{climatology_frequency.lower()} climatology variables: {resampled_climatology_ds.data_vars}")
             
             # save climatology to disk
             # pattern: {output_dir_climatology}/climatology_{variable_name}_{climatology_years[0]}-{climatology_years[1]}-{mean|std}-{base_frequency}-{climatology_frequency}-{spatial_resolution}.nc
