@@ -64,23 +64,23 @@ def compute_climatology(ds: xr.Dataset, frequency: str, resample: bool=False) ->
         month_of_year=ds.time.dt.month
     )
     
-    # groupby operation differs based on the type of frequency
-    if frequency.endswith('H'):
-        group_ds = ds.groupby(['day_of_year', 'hour_of_day'])
-    elif frequency.endswith('D'):
-        group_ds = ds.groupby('day_of_year')
-    elif frequency.endswith('W'):
-        group_ds = ds.groupby('week_of_year')
-    elif frequency.endswith('M'):
-        group_ds = ds.groupby('month_of_year')
-    
-    # compute stats and get into single dataset
-    clim_ds = group_ds.mean('time')
-    std_ds = group_ds.std('time')
-    for var in clim_ds.data_vars:
-        clim_ds["std_" + var] = std_ds[var]
-        clim_ds["mean_" + var] = clim_ds[var]
-        clim_ds.drop_vars(var)
+    # compute climatology per variable
+    clim_ds = xr.Dataset()
+    for var in ds.data_vars:
+        # group according to frequency
+        if frequency.endswith('H'):
+            group_ds = ds[var].groupby(['day_of_year', 'hour_of_day'])
+        elif frequency.endswith('D'):
+            group_ds = ds[var].groupby('day_of_year')
+        elif frequency.endswith('W'):
+            group_ds = ds[var].groupby('week_of_year')
+        elif frequency.endswith('M'):
+            group_ds = ds[var].groupby('month_of_year')
+        else:
+            raise NotImplementedError(f"{frequency} is not supported.")
+        # compute statistics
+        clim_ds[f"mean_{var}"] = group_ds.mean()
+        clim_ds[f"std_{var}"] = group_ds.std()
     
     return clim_ds
 

@@ -1,6 +1,6 @@
 gs_url: gs://weatherbench2/datasets/era5/1959-2022-6h-1440x721.zarr
 output_dir: data/era5_wb2/2021-2022-6h-1444x721/ 
-output_dir_climatology: data/era5_wb2_climatology/2021-2022-6h-1444x721/
+output_dir_climatology: data/era5_wb2_climatology/1991-2022-6h-1444x721/
 static_variables:
   - geopotential
   - land_sea_mask
