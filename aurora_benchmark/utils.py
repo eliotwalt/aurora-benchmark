@@ -51,9 +51,9 @@ def resample_dataset(ds: xr.Dataset, frequency: str) -> xr.Dataset:
 def compute_climatology(
     ds: xr.Dataset, 
     frequency: str, 
-    percentiles: list[float]=[5, 33, 66, 95],
+    percentiles: list[float]=[66, 95, 5, 33],
     percentile_variables: list[str]|None=None,
-    resample: bool=False
+    resample: bool=False,
 ) -> xr.Dataset:
     """
     Compute the climatology of a dataset at a given frequency.
@@ -64,7 +64,7 @@ def compute_climatology(
         frequency: str
             The frequency to compute the climatology at.
         percentiles: list[float]
-            The percentiles to compute. Default is [5, 33, 66, 95].
+            The percentiles to compute. Default is [66, 95, 5, 33].
         percentile_variables: list[str]
             The variables to compute the percentiles for. Default is None.
         resample: bool
