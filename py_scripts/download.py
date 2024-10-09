@@ -65,3 +65,6 @@ if __name__ == "__main__":
     # # close dask cluster
     # client.close()
     # cluster.close()
+    
+    # exit without error
+    sys.exit(0)
