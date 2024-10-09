@@ -2,6 +2,7 @@ import dask
 import xarray as xr
 import os
 import logging 
+from dask.distributed import Client, LocalCluster
 
 from aurora_benchmark.utils import (
     compute_climatology, 
@@ -50,14 +51,16 @@ def download_era5_wb2(
     
     # setup slurm with dask
     if os.environ.get("SLURM_CPUS_PER_TASK", False):
-        slurm = True
-        from dask.distributed import Client, LocalCluster
         n_cpus = int(os.environ.get("SLURM_CPUS_PER_TASK", 1))
-        cluster = LocalCluster(n_workers=n_cpus, threads_per_worker=1)
+        cluster = LocalCluster(n_workers=n_cpus, threads_per_worker=2)
         client = Client(cluster)
         verbose_print(verbose, f"SLURM detected. Setting up dask with {n_cpus} workers...")
     else:
-        slurm = False
+        # utilise all local cpus (os.cpu_count()
+        n_cpus = os.cpu_count()
+        cluster = LocalCluster(n_workers=n_cpus, threads_per_worker=2)
+        client = Client(cluster)
+        verbose_print(verbose, f"Running locally. Setting up dask with {n_cpus} workers...")
     
     verbose_print(verbose, "Downloading ERA5 data from WeatherBench2...")
     verbose_print(verbose, f" * static_variables: {static_variables}")
@@ -186,7 +189,7 @@ def download_era5_wb2(
                     exist_ok=True
                 )
     
-    if slurm:
-        client.close()
-        cluster.close()
-        verbose_print(verbose, "Dask cluster closed.")
+    # close dask cluster
+    client.close()
+    cluster.close()
+    verbose_print(verbose, "Dask cluster closed.")
