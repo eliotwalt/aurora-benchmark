@@ -2,7 +2,7 @@ import os, sys
 import argparse
 import yaml
 import logging
-from dask.distributed import Client, LocalCluster
+# from dask.distributed import Client, LocalCluster
 
 from aurora_benchmark.download import download_era5_wb2
 
@@ -31,18 +31,18 @@ if __name__ == "__main__":
     p.add_argument("--host_config", type=yaml_file, required=True)
     args = p.parse_args()
     
-    # setup slurm with dask
-    if os.environ.get("SLURM_CPUS_PER_TASK", False):
-        n_cpus = int(os.environ.get("SLURM_CPUS_PER_TASK", 1))
-        cluster = LocalCluster(n_workers=n_cpus, threads_per_worker=2)
-        client = Client(cluster)
-        logger.info(f"SLURM detected. Setting up dask with {n_cpus} workers...")
-    else:
-        # utilise all local cpus (os.cpu_count()
-        n_cpus = os.cpu_count()
-        cluster = LocalCluster(n_workers=n_cpus, threads_per_worker=2)
-        client = Client(cluster)
-        logger.info(f"Running locally. Setting up dask with {n_cpus} workers...")
+    # # setup slurm with dask
+    # if os.environ.get("SLURM_CPUS_PER_TASK", False):
+    #     n_cpus = int(os.environ.get("SLURM_CPUS_PER_TASK", 1))
+    #     cluster = LocalCluster(n_workers=n_cpus, threads_per_worker=2)
+    #     client = Client(cluster)
+    #     logger.info(f"SLURM detected. Setting up dask with {n_cpus} workers...")
+    # else:
+    #     # utilise all local cpus (os.cpu_count()
+    #     n_cpus = os.cpu_count()
+    #     cluster = LocalCluster(n_workers=n_cpus, threads_per_worker=2)
+    #     client = Client(cluster)
+    #     logger.info(f"Running locally. Setting up dask with {n_cpus} workers...")
 
     download_config = args.download_config
     host_config = args.host_config
@@ -57,6 +57,6 @@ if __name__ == "__main__":
         download_config = get_job_config(download_config, task_id)
     download_era5_wb2(**download_config)
     
-    # close dask cluster
-    client.close()
-    cluster.close()
+    # # close dask cluster
+    # client.close()
+    # cluster.close()

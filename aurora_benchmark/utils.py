@@ -9,6 +9,20 @@ logger = logging.getLogger(__name__)
 def verbose_print(verbose: bool, message: str) -> None:
     if verbose:
         logger.info(message)
+        
+def dask_percentile(x, p, dim="time"):
+    np_axis = list(x.dims).index(dim)
+    return xr.apply_ufunc(
+        np.percentile,
+        x,
+        input_core_dims=[[dim]],
+        output_core_dims=[["percentile"]],
+        kwargs={"q": p, "axis": np_axis},  # Ensure axis is specified correctly
+        dask="parallelized",
+        output_dtypes=[float],
+        output_sizes={"percentile": len(p)},
+        vectorize=True,
+    )
 
 def resample_dataset(ds: xr.Dataset, frequency: str) -> xr.Dataset:
     """
@@ -32,7 +46,13 @@ def resample_dataset(ds: xr.Dataset, frequency: str) -> xr.Dataset:
     
     return resampled_ds
 
-def compute_climatology(ds: xr.Dataset, frequency: str, resample: bool=False) -> xr.Dataset:
+def compute_climatology(
+    ds: xr.Dataset, 
+    frequency: str, 
+    percentiles: list[float]=[5, 33, 66, 95],
+    percentile_variables: list[str]|None=None,
+    resample: bool=False
+) -> xr.Dataset:
     """
     Compute the climatology of a dataset at a given frequency.
     
@@ -41,12 +61,16 @@ def compute_climatology(ds: xr.Dataset, frequency: str, resample: bool=False) ->
             The dataset to compute the climatology on.
         frequency: str
             The frequency to compute the climatology at.
+        percentiles: list[float]
+            The percentiles to compute. Default is [5, 33, 66, 95].
+        percentile_variables: list[str]
+            The variables to compute the percentiles for. Default is None.
+        resample: bool
+            Whether to resample the dataset to the given frequency. Default is False.
     
     Returns
-        mean_ds: xarray.Dataset
-            The mean climatology dataset.
-        std_ds: xarray.Dataset
-            The standard deviation climatology dataset.
+        clim_ds: xarray.Dataset
+            The climatology dataset with required statistics.
     """
     
     if not frequency.endswith("H") and int(frequency[:-1]) > 1:
@@ -81,7 +105,11 @@ def compute_climatology(ds: xr.Dataset, frequency: str, resample: bool=False) ->
         # compute statistics
         clim_ds[f"mean_{var}"] = group_ds.mean()
         clim_ds[f"std_{var}"] = group_ds.std()
-    
+        if var in percentile_variables and len(percentiles) > 0:
+            qds = group_ds.map(dask_percentile, p=percentiles)
+            for i, q in enumerate(percentiles):
+                clim_ds[f"p{q}_{var}"] = qds.sel(percentile=i)
+        
     return clim_ds
 
 def xr_to_netcdf(

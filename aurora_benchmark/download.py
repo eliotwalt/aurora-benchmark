@@ -34,6 +34,9 @@ AURORA_VARIABLE_NAMES_MAP = {
     'soil_type': 'stype',
 }
 
+# Create a reverse dictionary for inverse lookup
+INVERSE_AURORA_VARIABLE_NAMES_MAP = {v: k for k, v in AURORA_VARIABLE_NAMES_MAP.items()}
+
 def download_era5_wb2(
     gs_url: str,
     output_dir: str,
@@ -45,6 +48,8 @@ def download_era5_wb2(
     climatology_frequencies: list[str],
     climatology_years: list[int] = [1979, 2020],
     eval_years: list[int] = [2021, 2022],
+    percentiles: list[float]|None=None,
+    percentile_variables: list[str]|None=None,
     verbose: bool = True
 ) -> None:    
     
@@ -152,8 +157,11 @@ def download_era5_wb2(
             # reasample eval and climatology datasets
             verbose_print(verbose, f"Computing {climatology_frequency.lower()} climatology...")
             resampled_climatology_ds = compute_climatology(
-                climatology_ds, climatology_frequency,
-                resample=True
+                climatology_ds, 
+                climatology_frequency,
+                percentiles=percentiles,
+                percentile_variables=percentile_variables,
+                resample=True,
             )
             
             # print sizes
@@ -174,8 +182,7 @@ def download_era5_wb2(
                     sort_time=False,
                     exist_ok=True
                 )
-    
-    # close dask cluster
-    client.close()
-    cluster.close()
-    verbose_print(verbose, "Dask cluster closed.")
+    else:
+        verbose_print(verbose, "No climatology data to compute.")
+                
+    verbose_print(verbose, "Download complete.")
