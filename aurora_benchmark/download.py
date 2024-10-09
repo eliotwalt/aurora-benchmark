@@ -70,7 +70,7 @@ def download_era5_wb2(
     verbose_print(verbose, "Opening ERA5 dataset...")
     era5_ds = xr.open_zarr(
         gs_url, consolidated=True,
-        chunks={"time": 28*2, "latitude": 721, "longitude": 1440, "level": 1}
+        chunks={"time": 28*8, "latitude": 721, "longitude": 1440, "level": 1}
     )
     
     # split years
