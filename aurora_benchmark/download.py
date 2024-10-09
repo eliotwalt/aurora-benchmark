@@ -101,10 +101,10 @@ def download_era5_wb2(
         atmospheric_clim_ds = xr.Dataset()
         atmospheric_eval_ds = xr.Dataset()
 
-    # merge the eval, climatology, and static datasets
+    # merge the eval, climatology, and static datasets (select first dummy variable dim (the rest is nan))
     verbose_print(verbose, "Merging datasets...")
-    climatology_ds = xr.concat([surface_clim_ds, atmospheric_clim_ds], dim='variable')
-    eval_ds = xr.concat([surface_eval_ds, atmospheric_eval_ds], dim='variable')
+    climatology_ds = xr.concat([surface_clim_ds, atmospheric_clim_ds], dim='variable').sel(variable=0)
+    eval_ds = xr.concat([surface_eval_ds, atmospheric_eval_ds], dim='variable').sel(variable=0)
     
     # rename variables to match aurora
     verbose_print(verbose, "Renaming variables to match Aurora...")
@@ -123,8 +123,8 @@ def download_era5_wb2(
     if len(static_ds.data_vars) > 0:
         # save the static variables to disk
         # pattern: {output_dir}/{variable_name}_static-{spatial_resolution}.nc
-        verbose_print(verbose, "Saving static dataset to disk...")
         for variable_name in static_ds.data_vars:
+            verbose_print(verbose, f"Saving {variable_name} static dataset to disk...")
             xr_to_netcdf(    
                 static_ds[variable_name],
                 os.path.join(
@@ -140,10 +140,10 @@ def download_era5_wb2(
     if len(eval_ds.data_vars) > 0:
         # save the eval dataset to disk
         # pattern: {variable_name}_{eval_years[0]}-{eval_years[1]}-{base_frequency}-{spatial_resolution}.nc
-        verbose_print(verbose, "Saving evaluation dataset to disk...")
         for variable_name in eval_ds.data_vars:
+            verbose_print(verbose, f"Saving {variable_name} from evaluation dataset to disk...")
             xr_to_netcdf(    
-                eval_ds[variable_name],
+                eval_ds[variable_name].sel(variable=0),
                 os.path.join(
                     output_dir, 
                     f'{variable_name}_{eval_years[0]}-{eval_years[1]}-{base_frequency}-{spatial_resolution}.nc'
@@ -172,8 +172,8 @@ def download_era5_wb2(
             
             # save climatology to disk
             # pattern: {output_dir_climatology}/climatology_{variable_name}_{climatology_years[0]}-{climatology_years[1]}-{mean|std}-{base_frequency}-{climatology_frequency}-{spatial_resolution}.nc
-            verbose_print(verbose, f"Saving {climatology_frequency.lower()} climatology to disk...")
             for variable_name in resampled_climatology_ds.data_vars:
+                verbose_print(verbose, f"Saving {variable_name} from {climatology_frequency.lower()} climatology to disk...")
                 xr_to_netcdf(    
                     resampled_climatology_ds[variable_name],
                     os.path.join(

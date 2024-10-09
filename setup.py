@@ -15,6 +15,7 @@ setup(
         "microsoft-aurora",
         "gcsfs",
         "PyYAML",
+        "cartopy",
     ],
     python_requires='>=3.10',
     author='Eliot Walt',

@@ -3,11 +3,13 @@ import torch
 import dask
 from torch.utils.data import DataLoader
 from aurora import Batch, Metadata
+import numpy as np
 import logging
 
 from aurora_benchmark.utils import verbose_print
 
 dask.config.set(scheduler='threads')
+logger = logging.getLogger(__name__)
 
 from aurora_benchmark.data import (
     XRAuroraDataset,
@@ -32,14 +34,14 @@ def aurora_forecast(
 ): 
     chunks = {"time": 100, "latitude": 721, "longitude": 1440}
     # load xr data
-    era5_surface_ds = xr.concat(
+    surface_ds = xr.concat(
         [xr.open_dataset(
             path, engine="netcdf4",
             chunks=chunks) 
          for path in era5_surface_paths],
         dim="variable"
     )
-    era5_atmospheric_ds = xr.concat(
+    atmospheric_ds = xr.concat(
         [xr.open_dataset(
             path, engine="netcdf4",
             consolidated=True, 
@@ -47,7 +49,7 @@ def aurora_forecast(
          for path in era5_atmospheric_paths],
         dim="variable"
     )
-    era5_static_ds = xr.concat(
+    static_ds = xr.concat(
         [xr.open_dataset(
             path, engine="netcdf4",
             consolidated=True, 
@@ -55,8 +57,15 @@ def aurora_forecast(
          for path in era5_static_paths],
         dim="variable"
     )
-    # merge into 1 dataset
     # create dataset XRAuroraDataset
+    dataset = XRAuroraDataset(
+        surface_ds=surface_ds,
+        atmospheric_ds=atmospheric_ds,
+        static_ds=static_ds,
+        init_frequency=init_frequency,
+        forecast_horizon=forecast_horizon,
+        num_time_samples=2, 
+    )
     # create dataloader
     # load model, put on device
     # loop over batches
