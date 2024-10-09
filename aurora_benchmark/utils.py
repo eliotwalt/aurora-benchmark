@@ -12,6 +12,8 @@ def verbose_print(verbose: bool, message: str) -> None:
         
 def dask_percentile(x, p, dim="time"):
     np_axis = list(x.dims).index(dim)
+    # ensure no chunk along calculation dim 
+    x = x.chunk({dim: -1})
     return xr.apply_ufunc(
         np.percentile,
         x,
