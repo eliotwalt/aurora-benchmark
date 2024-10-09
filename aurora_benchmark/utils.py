@@ -104,11 +104,10 @@ def compute_climatology(
             group_ds = ds[var].groupby('month_of_year')
         else:
             raise NotImplementedError(f"{frequency} is not supported.")
-        # compute statistics
-        clim_ds[f"mean_{var}"] = group_ds.mean()
-        clim_ds[f"std_{var}"] = group_ds.std()
+        clim_ds[f"mean_{var}"] = group_ds.mean(dim="time")
+        clim_ds[f"std_{var}"] = group_ds.std(dim="time")
         if var in percentile_variables and len(percentiles) > 0:
-            qds = group_ds.map(dask_percentile, p=percentiles)
+            qds = group_ds.map(dask_percentile, p=percentiles, dim="time")
             for i, q in enumerate(percentiles):
                 clim_ds[f"p{q}_{var}"] = qds.sel(percentile=i)
         
