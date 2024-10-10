@@ -89,7 +89,7 @@ def aurora_forecast(
         raise NotImplementedError("Replacement variables not yet implemented.")
     
     # dask
-    chunks = None #{"time": 4*batch_size, "latitude": 721, "longitude": 1440}
+    chunks = {"time": 12*batch_size, "latitude": 721, "longitude": 1440}
     
     # load xr data
     verbose_print(verbose, "Reading data ...")
@@ -125,7 +125,8 @@ def aurora_forecast(
     
     # create dataloader
     eval_loader = DataLoader(
-        dataset, batch_size=batch_size, 
+        dataset, 
+        batch_size=batch_size, 
         collate_fn=aurora_batch_collate_fn,
         num_workers=2
     )

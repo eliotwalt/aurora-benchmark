@@ -27,7 +27,7 @@ interest_variables:
 interest_levels:
   - 250
   - 500
-batch_size: 16
+batch_size: 6
 era5_base_frequency: 6h
 init_frequency: 1d
 forecast_horizon: 6w
