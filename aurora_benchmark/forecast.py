@@ -133,7 +133,7 @@ def aurora_forecast(
         model = AuroraSmall()
     else:
         model = Aurora()
-    model.load_from_hf(aurora_model)
+    model.load_checkpoint(aurora_model)
     model = model.to(device)
     
     # evaluation loop
@@ -202,9 +202,10 @@ def aurora_forecast(
             for lead_time in np.unique(ds.lead_time.values).astype("timedelta64[h]"):
                 
                 # TODO: lead time based on eval_aggregation??
+                lead_time = f"{lead_time}h"
                 
                 ds[var].sel(lead_time=lead_time).to_netcdf(
-                    f"{output_dir}/{var}-{lead_time}h-{start_year}-{end_year}-{era5_base_frequency}-{resolution}.nc"
+                    f"{output_dir}/{var}-{start_year}-{end_year}-{era5_base_frequency}-{init_frequency}-{forecast_horizon}-{lead_time}-{resolution}.nc"
                 )
             xr_to_netcdf(ds[var], output_dir, f"{var_type}_{var}.nc")
     

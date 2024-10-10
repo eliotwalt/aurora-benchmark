@@ -27,7 +27,6 @@ interest_variables:
 interest_levels:
   - 250
   - 500
-output_dir: data/era5_wb2_forecasts/2021-2022-6h-6w-1444x721_original_variables/
 batch_size: 16
 era5_base_frequency: 6h
 init_frequency: 1d
@@ -36,3 +35,6 @@ eval_aggregation: null
 eval_start: 1w
 aurora_model: aurora-0.25-pretrained.ckpt
 verbose: true
+
+output_dir: data/era5_wb2_forecasts/2021-2022-6h-1d-6w-1444x721_original_variables/
+#                        ... {era6_freq}-{init_freq}-{forecast_horizon} ...
