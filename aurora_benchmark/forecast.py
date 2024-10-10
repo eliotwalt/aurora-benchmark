@@ -94,11 +94,11 @@ def aurora_forecast(
     # load xr data
     verbose_print(verbose, "Reading data ...")
     surface_ds = xr.merge(
-        [xr.open_dataset(path, engine="netcdf4").chunk(chunks=chunks) 
+        [xr.open_dataset(path, engine="netcdf4", chunks=chunks) 
          for path in era5_surface_paths],
     ).rename(AURORA_VARAIBLE_RENAMES["surface"])
     atmospheric_ds = xr.merge(
-        [xr.open_dataset(path, engine="netcdf4").chunk(chunks=chunks) 
+        [xr.open_dataset(path, engine="netcdf4", chunks=chunks) 
          for path in era5_atmospheric_paths],
     ).rename(AURORA_VARAIBLE_RENAMES["atmospheric"])
     static_ds = xr.merge(
