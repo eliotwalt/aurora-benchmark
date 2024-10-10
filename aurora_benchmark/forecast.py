@@ -70,6 +70,8 @@ def aurora_forecast(
     verbose: bool=True,
 ): 
     
+    os.makedirs(output_dir, exist_ok=True)
+    
     # compute additional arguments
     warmup_steps = pd.Timedelta(eval_start) / pd.Timedelta(era5_base_frequency) if eval_start is not None else 0.0
     forecast_steps = pd.Timedelta(forecast_horizon) / pd.Timedelta(era5_base_frequency)
@@ -87,7 +89,7 @@ def aurora_forecast(
         raise NotImplementedError("Replacement variables not yet implemented.")
     
     # dask
-    chunks = {"time": 100, "latitude": 721, "longitude": 1440}
+    chunks = None #{"time": 4*batch_size, "latitude": 721, "longitude": 1440}
     
     # load xr data
     verbose_print(verbose, "Reading data ...")
@@ -145,23 +147,23 @@ def aurora_forecast(
         for i, batch in enumerate(eval_loader):
             batch = batch.to(device)
             # rollout until for forecast_steps
-            verbose_print(True, f"Rollout prediction on batch {i} ...")
+            verbose_print(verbose, f"Rollout prediction on batch {i} ...")
             trajectories = [[] for _ in range(batch_size)]
             for s, batch_pred in enumerate(rollout(model, batch, steps=forecast_steps)):
                 if s < warmup_steps:
-                    verbose_print(True, f" * Rollout step {s+1}: skipping warmup period")
+                    verbose_print(verbose, f" * Rollout step {s+1}: skipping warmup period")
                     continue            
                 # separate batched batches
                 sub_batch_preds = unpack_aurora_batch(batch_pred.to("cpu"))
-                verbose_print(True, f" * Rollout step {s+1}: unpacked {len(sub_batch_preds)} sub-batches")
+                verbose_print(verbose, f" * Rollout step {s+1}: unpacked {len(sub_batch_preds)} sub-batches")
                 assert len(sub_batch_preds) == batch_size
                 # accumulate
                 for b, sub_batch_pred in enumerate(sub_batch_preds):
                     trajectories[b].append(sub_batch_pred)
-            verbose_print(True, f"Processing trajectories ...")
+            verbose_print(verbose, f"Processing trajectories ...")
             # convert to xr 
             for init_time, trajectory in zip(batch.metadata.time, trajectories):
-                verbose_print(True, f" * init_time={init_time}: combining {len(trajectory)} steps")
+                verbose_print(verbose, f" * init_time={init_time}: combining {len(trajectory)} steps")
                 assert len(trajectory) == forecast_steps-warmup_steps
                 # collate trajectory batches
                 trajectory = aurora_batch_collate_fn(trajectory)
@@ -171,13 +173,13 @@ def aurora_forecast(
                 for var_type, vars_ds in trajectory.items():
                     # ensure processing is necessary
                     if var_type == "static_ds":
-                        verbose_print(True, f" * Skipping static variables")
+                        verbose_print(verbose, f" * Skipping static variables")
                         continue # we do not care about static variables for the forecast
                     if not any([var in vars_ds.data_vars for var in interest_variables]):
-                        verbose_print(True, f" * Skipping {var_type} variables as no interest variables are present")
+                        verbose_print(verbose, f" * Skipping {var_type} variables as no interest variables are present")
                         continue # don't bother processing variables we are not interested in
                     if var_type == "atmospheric_ds" and (interest_levels is None or len(interest_levels)==0):
-                        verbose_print(True, f" * Skipping atmospheric variables as no interest levels have been requested")
+                        verbose_print(verbose, f" * Skipping atmospheric variables as no interest levels have been requested")
                         continue # we do not care about atmospheric variables if no levels are of interest
                     
                     # select interest variables and levels
@@ -200,26 +202,24 @@ def aurora_forecast(
     # merge predictions and save
     for var_type, var_ds_list in xr_preds.items():
         ds = xr.merge(var_ds_list).rename(INVERTED_AURORA_VARAIBLE_RENAMES[var_type])
-        verbose_print(True, f"Writing {var_type} predictions ...")
+        verbose_print(verbose, f"Writing {var_type} predictions ...")
         for var in ds.data_vars:
             for lead_time in np.unique(ds.lead_time.values).astype("timedelta64[h]"):
                 
                 # TODO: lead time based on eval_aggregation??
                 lead_time = f"{lead_time}h"
                 
-                ds[var].sel(lead_time=lead_time).to_netcdf(
-                    f"{output_dir}/{var}-{start_year}-{end_year}-{era5_base_frequency}-{init_frequency}-{forecast_horizon}-{lead_time}-{resolution}.nc"
+                xr_to_netcdf(
+                    ds[var].sel(lead_time=lead_time),
+                    os.path.join(
+                        output_dir,
+                        f"{var}-{start_year}-{end_year}-{era5_base_frequency}-{init_frequency}-{forecast_horizon}-{lead_time}-{resolution}.nc"
+                    ),
+                    precision="float32",
+                    compression_level=0,
+                    sort_time=False,
+                    exist_ok=True
                 )
-            xr_to_netcdf(ds[var], output_dir, f"{var_type}_{var}.nc")
-    
-    # loop over batches
-    #   sample batch
-    #   put batch on device
-    #   forecast rollout
-    #   put preds on cpu
-    #   convert to xr.Dataset
-    #   rename replaced variables (if any)
-    #   aggregate & write
     
 if __name__ == "__main__":
     aurora_forecast(
