@@ -100,14 +100,12 @@ def aurora_forecast(
     atmospheric_ds = xr.merge(
         [xr.open_dataset(
             path, engine="netcdf4",
-            consolidated=True, 
             chunks=chunks) 
          for path in era5_atmospheric_paths],
     ).rename(AURORA_VARAIBLE_RENAMES["atmospheric"])
     static_ds = xr.merge(
         [xr.open_dataset(
             path, engine="netcdf4",
-            consolidated=True, 
             chunks=chunks) 
          for path in era5_static_paths],
     ).rename(AURORA_VARAIBLE_RENAMES["static"])
