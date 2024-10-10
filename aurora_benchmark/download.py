@@ -68,9 +68,13 @@ def download_era5_wb2(
     
     # open era5 zarr
     verbose_print(verbose, "Opening ERA5 dataset...")
+    if len(atmospheric_variables) > 0:
+        chunks = {"time": 28*25, "latitude": 721, "longitude": 1440, "level": 7}
+    else:
+        chunks = {"time": 28*75, "latitude": 721, "longitude": 1440}
     era5_ds = xr.open_zarr(
         gs_url, consolidated=True,
-        chunks={"time": 28*15, "latitude": 721, "longitude": 1440, "level": 2}
+        chunks=chunks
     )
     
     # split years
