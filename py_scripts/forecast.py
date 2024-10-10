@@ -39,6 +39,12 @@ if __name__ == "__main__":
 
     # add data root specific to the host
     forecast_config["output_dir"] = os.path.join(host_config["data_root_dir"], forecast_config["output_dir"])
+    for key in ["era5_surface_paths", "era5_atmospheric_paths", "era5_static_paths"]:
+        forecast_config[key] = [
+            os.path.join(host_config["data_root_dir"], path) 
+            for path in forecast_config[key]
+        ]
+        
 
     # forecast
     aurora_forecast(**forecast_config)
