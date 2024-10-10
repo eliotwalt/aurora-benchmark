@@ -128,12 +128,13 @@ def aurora_forecast(
         num_workers=2
     )
     
-    # model
-    verbose_print(verbose, "Loading model ...")
+    # mode
     if "small" in aurora_model:
+        verbose_print(verbose, "Loading AuroraSmall model ...")
         model = AuroraSmall()
     else:
-        model = Aurora()
+        verbose_print(verbose, "Loading Aurora model ...")
+        model = Aurora(use_lora=False)
     model.load_checkpoint("microsoft/aurora", aurora_model)
     model = model.to(device)
     
