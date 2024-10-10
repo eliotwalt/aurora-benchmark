@@ -7,11 +7,13 @@ HOST_CONFIG=./configs/snellius.yaml
 ./env/modules_gpu.sh
 source ./env/venv_gpu/bin/activate
 
-# compute num jobs
-num_jobs=$(python ./py_scripts/download_task_array.py $DOWNLOAD_CONFIG)
-
 # download data with python script
-sbatch --cpus-per-task=9 --mem=180G --time=30:00:00 --output=./logs/download/%A_%a.out \
-    --error=./logs/download/%A_%a.out --job-name=dl_era5_wb2 --partition=himem_4tb \
-    --array=0-$((num_jobs-1)) \
-    --wrap="./env/modules_cpu.sh && source ./env/venv_cpu/bin/activate  && python ./py_scripts/download.py --download_config $DOWNLOAD_CONFIG --host_config $HOST_CONFIG"
+sbatch --cpus-per-task=1 \
+    --gpus=1 \
+    --mem=32G \
+    --job-name=fc_era5_wb2 \
+    --partition=gpu_mig \
+    --time=12:00:00 \
+    --output=./logs/forecast/%j.out \
+    --error=./logs/download/%j.out \
+    --wrap="./env/modules_gpu.sh && source ./env/venv_gpu/bin/activate  && python ./py_scripts/forecast.py --forecast_config $FORECAST_CONFIG --host_config $HOST_CONFIG"
