@@ -15,12 +15,12 @@ dask.config.set(scheduler='threads')
 
 AURORA_VARIABLE_NAMES = {
     "surface": [
-        'u10',
-        'v10',
-        't2m',
+        '10u',
+        '10v',
+        '2t',
         'msl',
-        'sst',
-        'tp',
+        #'sst', # additional
+        #'tp', # additional
     ],
     "atmospheric": [
         't',
@@ -32,7 +32,7 @@ AURORA_VARIABLE_NAMES = {
     "static": [
         'z',
         'lsm',
-        'stype',
+        'slt',
     ]
 }
 AURORA_PRESSURE_LEVELS = [50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000]
@@ -48,17 +48,21 @@ def xr_to_aurora_batch(
     """ 
     inspired by https://microsoft.github.io/aurora/example_era5.html
     """ 
+    # ensure only 2 timesteps
+    times = surface_ds.time.values.astype("datetime64[s]").tolist()
+    assert len(times) == 2, f"Aurora requires 2 time samples, got {len(times)}."
+    _time = times[1] # only the second time sample (i.e. current step)
     # ensure longitudes start at 0
     longitudes = torch.Tensor(sorted(atmospheric_ds.longitude.values, reverse=False))
     if longitudes.min() == -180.0:
         longitudes += 180.0
     return Batch(
         surf_vars = {
-            var: torch.from_numpy(surface_ds[var].values)
+            var: torch.from_numpy(surface_ds[var].values).unsqueeze(0)
             for var in surface_variables
         },
         atmos_vars = {
-            var: torch.from_numpy(atmospheric_ds[var].values)
+            var: torch.from_numpy(atmospheric_ds[var].values).unsqueeze(0)
             for var in atmospheric_variables
         },
         static_vars = {
@@ -71,46 +75,86 @@ def xr_to_aurora_batch(
             # Converting to `datetime64[s]` ensures that the output of `tolist()` gives
             # `datetime.datetime`s. Note that this needs to be a tuple of length one:
             # one value for every batch element.
-            time=(surface_ds.time.values.astype("datetime64[s]").tolist(),),
+            time=_time,
             atmos_levels=tuple(int(level) for level in atmospheric_ds.level.values),
         )
     )
 
-def aurora_batch_to_xr(batch: Batch) -> dict[str, xr.Dataset]:
-    surface_ds = {
-        var: xr.Dataset(
-            batch.surf_vars[var].numpy(),
-            dims=["latitude", "longitude"],
+def aurora_batch_to_xr(batch: Batch, frequency: str) -> dict[str, xr.Dataset]:
+    """
+    Retrieve xr Dataset structures from an Aurora batch.
+    
+    Args:
+        batch: Batch
+            The Aurora batch.
+        frequency: str
+            The frequency of the time samples. This is used to create the time
+            coordinates. For example, if the frequency is 6 hours, then the time
+            coordinates will be 6 hours apart.
+    """
+    
+    # TODO
+    # 1. As manty time coordinates as time samples!
+    # 2. Ensure staic variables are oki
+    # 3. Remove the batch dimension to retrieve time
+    
+    def flatten_batch_dim(x: torch.Tensor) -> torch.Tensor:
+        shape = x.shape
+        if len(shape) == 4: # B, T, H, W
+            x = x.reshape(shape[0] * shape[1], shape[2], shape[3])
+        elif len(shape) == 5: # B, T, C, H, W
+            x = x.reshape(shape[0] * shape[1], shape[2], shape[3], shape[4])
+        else:
+            raise ValueError(f"Expected 4 or 5 dimensions, got {len(shape)}")
+        return x
+        
+    def expand_timestamps(timestamps: tuple, frequency: str, num_time_samples: int) -> np.ndarray:
+        """
+        Expand the timestamps metadata to include all the time samples.
+        """
+        timestamps = np.array(timestamps, dtype="datetime64").reshape(-1, 1)
+        timestamps = np.concatenate([
+            timestamps + k * pd.Timedelta(frequency)
+            for k in range(0, num_time_samples)
+        ], axis=1).reshape(-1)
+        return timestamps
+    
+    num_time_samples = batch.surf_vars[list(batch.surf_vars.keys())[0]].shape[1]
+    
+    surface_ds = xr.Dataset({
+        var: xr.DataArray(
+            flatten_batch_dim(batch.surf_vars[var].numpy()),
+            dims=["time", "latitude", "longitude"],
             coords={"latitude": batch.metadata.lat, 
                     "longitude": batch.metadata.lon,
-                    "time": batch.metadata.time},
+                    "time": expand_timestamps(batch.metadata.time, frequency, num_time_samples),}
         )
         for var in batch.surf_vars
-    }
-    atmospheric_ds = {
-        var: xr.Dataset(
-            batch.atmos_vars[var].numpy(),
-            dims=["latitude", "longitude"],
+    })
+    atmospheric_ds = xr.Dataset({
+        var: xr.DataArray(
+            flatten_batch_dim(batch.atmos_vars[var].numpy()),
+            dims=["time", "level", "latitude", "longitude"],
             coords={"latitude": batch.metadata.lat, 
                     "longitude": batch.metadata.lon,
-                    "time": batch.metadata.time,
-                    "level": batch.metadata.atmos_levels},
+                    "time": expand_timestamps(batch.metadata.time, frequency, num_time_samples),
+                    "level": list(batch.metadata.atmos_levels),},
         )
         for var in batch.atmos_vars
-    }
-    static_ds = {
-        var: xr.Dataset(
+    })
+    static_ds = xr.Dataset({
+        var: xr.DataArray(
             batch.static_vars[var].numpy(),
             dims=["latitude", "longitude"],
             coords={"latitude": batch.metadata.lat, 
                     "longitude": batch.metadata.lon},
         )
         for var in batch.static_vars
-    }
+    })
     return {
-        "surface": xr.merge(surface_ds),
-        "atmospheric": xr.merge(atmospheric_ds),
-        "static": xr.merge(static_ds),
+        "surface_ds": surface_ds,
+        "atmospheric_ds": atmospheric_ds,
+        "static_ds": static_ds,
     }
 
 def aurora_batch_collate_fn(batches: list[Batch]) -> Batch:
@@ -124,7 +168,7 @@ def aurora_batch_collate_fn(batches: list[Batch]) -> Batch:
             for var in batches[0].atmos_vars
         },
         static_vars={
-            var: torch.cat([batch.static_vars[var] for batch in batches], dim=0)
+            var: batches[0].static_vars[var]
             for var in batches[0].static_vars
         },
         metadata=Metadata(
@@ -134,6 +178,29 @@ def aurora_batch_collate_fn(batches: list[Batch]) -> Batch:
             atmos_levels=batches[0].metadata.atmos_levels,
         )
     )
+
+def unpack_aurora_batch(batch: Batch) -> list[Batch]:
+    """
+    Unpack Aurora batch into a list of batches
+    """
+    # compute batch size
+    batch_size = len(batch.metadata.time)
+    # unpack the batch
+    batches = [
+        Batch(
+            surf_vars={k: batch.surf_vars[k][b].unsqueeze(0) for k in batch.surf_vars},
+            atmos_vars={k: batch.atmos_vars[k][b].unsqueeze(0) for k in batch.atmos_vars},
+            static_vars=batch.static_vars,
+            metadata=Metadata(
+                lat=batch.metadata.lat,
+                lon=batch.metadata.lon,
+                time=batch.metadata.time[b],
+                atmos_levels=batch.metadata.atmos_levels,
+            )
+        )
+        for b in range(batch_size)
+    ]
+    return batches
 
 class XRAuroraDataset(Dataset):
     """
@@ -187,6 +254,9 @@ class XRAuroraDataset(Dataset):
                 the model. Defaults to an empty dictionary.
         """
         super().__init__()
+        self.surface_ds = surface_ds.sortby("time")
+        self.atmospheric_ds = atmospheric_ds.sortby("time")
+        self.static_ds = static_ds
         self.init_frequency = init_frequency
         self.forecast_horizon = forecast_horizon
         self.num_time_samples = num_time_samples
@@ -194,51 +264,59 @@ class XRAuroraDataset(Dataset):
         self.atmospheric_variables = atmospheric_variables
         self.static_variables = static_variables
         self.pressure_levels = pressure_levels
-        self.replacement_variables = replacement_variables
-        
-        self.surface_ds = self._get_init_times(surface_ds)
-        self.atmospheric_ds = self._get_init_times(atmospheric_ds)
-        self.atmospheric_ds = self.atmospheric_ds.sel(level=pressure_levels)
-        self.static_ds = static_ds
-        
-        assert len(self.surface_ds.time) == len(self.atmospheric_ds.time)
+        self.replacement_variables = replacement_variables        
+        self.init_timestamps = self._get_init_timestamps()
         
         if init_frequency != "1D":
-            raise NotImplementedError("Only daily initialisation times are supported.")
+            warnings.warn("The init_frequency is not 1 day. This has not been tested.")
         
         if len(replacement_variables) > 0:
             raise NotImplementedError("Replacement variables are not yet implemented.")
         
-    def _get_init_times(self, ds: xr.Dataset) -> xr.Dataset:
+    def _get_init_timestamps(self) -> np.ndarray:
         """
-        Keep only the valid initialisation timestamps, i.e., at init_frequency
-        from one another and with enough ground truth data to make a forecast
-        of forecast_horizon.
+        Compute the timestamps of all model initialisations
+        
+        Returns:
+            valid_timestamps: np.ndarray
+                The timestamps of the model initialisations of shape (N, self.num_time_samples), 
+                such that valid_timestamps[i] contains all the timestamps required for the 
+                i-th batch. dtype=datetime64[s]
         """
-        def first_n(group: xr.Dataset, n: int) -> xr.Dataset:
-            if len(group.time) < n:
-                # return an empty Dataset with the same structure
-                # that will be discarded by the resample method
-                return group.isel(time=slice(0, 0))
-            return group.isel(time=slice(0, n))
-        # ensure sorted
-        ds = ds.sortby("time")
-        # resample to keep only the first num_time_samples at each init_frequency
-        timestamps = ds.indexes["time"]
-        ds = ds.resample(time=self.init_frequency).map(first_n, n=self.num_time_samples)
-        ds['time'] = timestamps[ds.time.values]
-        # select the timesteps that are at least forecast_horizon away from the last timestep
-        ds = ds.sel(time=ds.time <= ds.time.max() - pd.Timedelta(self.forecast_horizon))
-        return ds
+        assert (self.surface_ds.time == self.atmospheric_ds.time).all(), f"got different timestamps for surface and atmospheric data."
+        
+        # extract initial timestamps
+        timestamps = self.surface_ds.time.values.astype("datetime64[s]")
+        
+        # remove samples that do not allow for at least forecast horizon supervised steps
+        timestamps = timestamps[timestamps < timestamps[-1] - pd.Timedelta(self.forecast_horizon)]
+
+        # keep only the timesteps at every [init_frequency + k] for k = 1 to num time samples
+        valid_timestamps = np.concatenate([
+            pd.date_range(
+                start=timestamps[k],
+                end=timestamps[-(self.num_time_samples-k)]
+            ).values.astype("datetime64[s]").reshape(-1, 1)
+            for k in range(self.num_time_samples)
+        ], axis=1)
+        
+        return valid_timestamps
+    
+    @classmethod
+    def from_cloud_storage(cls, zarr_url: str, **kwargs) -> None:
+        """
+        No need to download anything locally
+        """
+        raise NotImplementedError
         
     def __len__(self) -> int:
-        return len(self.sruface_ds.time)-1
+        return self.init_timestamps.shape[0]
     
-    def __getitem__(self, idx: int) -> Batch:
-        time_slice = slice(self.surface_ds.time.values[idx], self.surface_ds.time.values[idx-1])     
+    def __getitem__(self, k: int) -> Batch:
+        batch_timestamps = self.init_timestamps[k]
         return xr_to_aurora_batch(
-            self.surface_ds.sel(time=time_slice),
-            self.atmospheric_ds.sel(time=time_slice),
+            self.surface_ds.sel(time=batch_timestamps),
+            self.atmospheric_ds.sel(time=batch_timestamps),
             self.static_ds,
             surface_variables=self.surface_variables,
             static_variables=self.static_variables,

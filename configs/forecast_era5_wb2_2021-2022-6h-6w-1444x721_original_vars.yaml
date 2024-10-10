@@ -1,0 +1,38 @@
+era5_surface_paths:
+  - data/era5_wb2/2021-2022-6h-1444x721/v10_2021-2022-6h-1440x721.nc
+  - data/era5_wb2/2021-2022-6h-1444x721/t2m_2021-2022-6h-1440x721.nc
+#  - data/era5_wb2/2021-2022-6h-1444x721/tp_2021-2022-6h-1440x721.nc # original only
+  - data/era5_wb2/2021-2022-6h-1444x721/u10_2021-2022-6h-1440x721.nc
+  - data/era5_wb2/2021-2022-6h-1444x721/msl_2021-2022-6h-1440x721.nc
+#  - data/era5_wb2/2021-2022-6h-1444x721/sst_2021-2022-6h-1440x721.nc # original only
+era5_atmospheric_paths:
+  - data/era5_wb2/2021-2022-6h-1444x721/q_2021-2022-6h-1440x721.nc
+  - data/era5_wb2/2021-2022-6h-1444x721/t_2021-2022-6h-1440x721.nc
+  - data/era5_wb2/2021-2022-6h-1444x721/u_2021-2022-6h-1440x721.nc
+  - data/era5_wb2/2021-2022-6h-1444x721/v_2021-2022-6h-1440x721.nc
+  - data/era5_wb2/2021-2022-6h-1444x721/z_2021-2022-6h-1440x721.nc
+era5_static_paths:
+  - data/era5_wb2/2021-2022-6h-1444x721/lsm_static-1440x721.nc
+  - data/era5_wb2/2021-2022-6h-1444x721/z_static-1440x721.nc
+  - data/era5_wb2/2021-2022-6h-1444x721/stype_static-1440x721.nc
+interest_variables:
+  - t2m
+  - u10
+  - v10
+  - u
+  - v
+  - z
+  - t
+  - msl
+interest_levels:
+  - 250
+  - 500
+output_dir: data/era5_wb2_forecasts/2021-2022-6h-6w-1444x721_original_variables/
+batch_size: 16
+era5_base_frequency: 6h
+init_frequency: 1d
+forecast_horizon: 6w
+eval_aggregation: null
+eval_start: 1w
+aurora_model: aurora-0.25-pretrained.ckpt
+verbose: true
