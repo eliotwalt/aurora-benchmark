@@ -119,6 +119,7 @@ def aurora_forecast(
         forecast_horizon=forecast_horizon,
         num_time_samples=2, # Aurora has fixed history length of 2...
     )
+    verbose_print(verbose, f"Loaded dataset of length {len(dataset)}")
     
     # create dataloader
     eval_loader = DataLoader(
@@ -133,10 +134,11 @@ def aurora_forecast(
         model = AuroraSmall()
     else:
         model = Aurora()
-    model.load_checkpoint(aurora_model)
+    model.load_checkpoint("microsoft/aurora", aurora_model)
     model = model.to(device)
     
     # evaluation loop
+    verbose_print(verbose, "Starting evaluation ...")
     xr_preds = {"surface_ds": [], "atmospheric_ds": []}
     with torch.inference_mode() and torch.no_grad():
         for i, batch in enumerate(eval_loader):
