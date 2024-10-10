@@ -254,9 +254,9 @@ class XRAuroraDataset(Dataset):
                 the model. Defaults to an empty dictionary.
         """
         super().__init__()
-        self.surface_ds = surface_ds.sortby("time").compute()
-        self.atmospheric_ds = atmospheric_ds.sortby("time").compute()
-        self.static_ds = static_ds.compute()
+        self.surface_ds = surface_ds.sortby("time")
+        self.atmospheric_ds = atmospheric_ds.sortby("time")
+        self.static_ds = static_ds
         self.init_frequency = init_frequency
         self.forecast_horizon = forecast_horizon
         self.num_time_samples = num_time_samples
