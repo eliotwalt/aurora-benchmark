@@ -15,5 +15,5 @@ sbatch --cpus-per-task=1 \
     --partition=gpu_mig \
     --time=12:00:00 \
     --output=./logs/forecast/%j.out \
-    --error=./logs/download/%j.out \
+    --error=./logs/forecast/%j.out \
     --wrap="./env/modules_gpu.sh && source ./env/venv_gpu/bin/activate  && python ./py_scripts/forecast.py --forecast_config $FORECAST_CONFIG --host_config $HOST_CONFIG"
