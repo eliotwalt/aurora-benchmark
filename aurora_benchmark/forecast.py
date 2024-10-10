@@ -89,7 +89,7 @@ def aurora_forecast(
         raise NotImplementedError("Replacement variables not yet implemented.")
     
     # dask
-    chunks = {"time": 12*batch_size, "latitude": 721, "longitude": 1440}
+    chunks = {"time": 4*batch_size, "latitude": 721, "longitude": 1440}
     
     # load xr data
     verbose_print(verbose, "Reading data ...")

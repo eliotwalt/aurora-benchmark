@@ -8,9 +8,9 @@ HOST_CONFIG=./configs/snellius.yaml
 source ./env/venv_gpu/bin/activate
 
 # download data with python script
-sbatch --cpus-per-task=1 \
+sbatch --cpus-per-task=4 \
     --gpus=1 \
-    --mem=32G \
+    --mem=72G \
     --job-name=fc_era5_wb2 \
     --partition=gpu_mig \
     --time=12:00:00 \
