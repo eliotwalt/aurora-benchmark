@@ -1,3 +1,4 @@
+module purge
 module load 2023
 module load Python/3.11.3-GCCcore-12.3.0
 module load PyTorch/2.1.2-foss-2023a
