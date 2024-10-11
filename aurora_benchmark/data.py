@@ -265,8 +265,8 @@ class XRAuroraDataset(Dataset):
                 Whether to persist the datasets. Defaults to False.
         """
         super().__init__()
-        self.surface_ds = surface_ds.sortby("time")
-        self.atmospheric_ds = atmospheric_ds.sortby("time")
+        self.surface_ds = surface_ds
+        self.atmospheric_ds = atmospheric_ds
         self.static_ds = static_ds
         self.init_frequency = init_frequency
         self.forecast_horizon = forecast_horizon
@@ -346,8 +346,8 @@ class XRAuroraDataset(Dataset):
     def __getitem__(self, k: int) -> Batch:
         batch_timestamps = self.init_timestamps[k]
         return xr_to_aurora_batch(
-            self.surface_ds.sel(time=batch_timestamps),
-            self.atmospheric_ds.sel(time=batch_timestamps),
+            self.surface_ds.sel(time=batch_timestamps).compute(),
+            self.atmospheric_ds.sel(time=batch_timestamps).compute(),
             self.static_ds,
             surface_variables=self.surface_variables,
             static_variables=self.static_variables,

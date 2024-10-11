@@ -14,7 +14,10 @@ logs/
 local.yaml
 snellius.yaml
 
+tmp_data/ 
 data/
 *.nc
 
 *.draft.*
+
+toy_era5.sh

@@ -95,7 +95,7 @@ def aurora_forecast(
         raise NotImplementedError("Replacement variables not yet implemented.")
     
     # dask
-    time_chunk = 18 * batch_size
+    time_chunk = 10 * batch_size
     
     # load xr data
     verbose_print(verbose, "Reading data ...")
@@ -207,7 +207,7 @@ def aurora_forecast(
             
     # merge predictions and save
     for var_type, var_ds_list in xr_preds.items():
-        ds = xr.merge(var_ds_list).rename(INVERTED_AURORA_VARAIBLE_RENAMES[var_type])
+        ds = xr.concat(var_ds_list, dim="time").rename(INVERTED_AURORA_VARAIBLE_RENAMES[var_type])
         verbose_print(verbose, f"Writing {var_type} predictions ...")
         for lead_time in np.unique(ds.lead_time.values).astype("timedelta64[h]"):
             for var in ds.data_vars:
@@ -222,7 +222,7 @@ def aurora_forecast(
                         f"{var}-{start_year}-{end_year}-{era5_base_frequency}-{init_frequency}-{forecast_horizon}-{lead_time}-{resolution}.nc"
                     ),
                     precision="float32",
-                    compression_level=0,
+                    compression_level=1,
                     sort_time=False,
                     exist_ok=True
                 )
