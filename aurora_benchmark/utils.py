@@ -91,13 +91,13 @@ def compute_climatology(
     clim_ds = xr.Dataset()
     for var in ds.data_vars:
         # group according to frequency
-        if frequency.endswith('H'):
+        if frequency.upper().endswith('H'):
             group_ds = ds[var].groupby(['day_of_year', 'hour_of_day'])
-        elif frequency.endswith('D'):
+        elif frequency.upper().endswith('D'):
             group_ds = ds[var].groupby('day_of_year')
-        elif frequency.endswith('W'):
+        elif frequency.upper().endswith('W'):
             group_ds = ds[var].groupby('week_of_year')
-        elif frequency.endswith('M'):
+        elif frequency.upper().endswith('M'):
             group_ds = ds[var].groupby('month_of_year')
         else:
             raise NotImplementedError(f"{frequency} is not supported.")
