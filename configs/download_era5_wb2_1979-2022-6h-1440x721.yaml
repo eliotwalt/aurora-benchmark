@@ -31,7 +31,6 @@ pressure_levels:
   - 1000
 climatology_frequencies:
   - 1d
-  - 1w
 climatology_years:
   - 1991
   - 2020
