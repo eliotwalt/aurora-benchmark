@@ -92,18 +92,18 @@ def aurora_forecast(
         raise NotImplementedError("Replacement variables not yet implemented.")
     
     # dask
-    chunks = {"time": 50*batch_size, "latitude": 721, "longitude": 1440}
+    time_chunk = 20 * batch_size
     
     # load xr data
     verbose_print(verbose, "Reading data ...")
     surface_ds = xr.merge(
         [xr.open_dataset(path, engine="netcdf4", 
-                         chunks={"time": 4*batch_size, "latitude": 721, "longitude": 1440}) 
+                         chunks={"time": time_chunk, "latitude": 721, "longitude": 1440}) 
          for path in era5_surface_paths],
     ).rename(AURORA_VARAIBLE_RENAMES["surface"])
     atmospheric_ds = xr.merge(
         [xr.open_dataset(path, engine="netcdf4",
-                         chunks={"time": 4*batch_size, "latitude": 721, "longitude": 1440, "level": 7}) 
+                         chunks={"time": time_chunk, "latitude": 721, "longitude": 1440, "level": 7}) 
          for path in era5_atmospheric_paths],
     ).rename(AURORA_VARAIBLE_RENAMES["atmospheric"])
     static_ds = xr.merge(
