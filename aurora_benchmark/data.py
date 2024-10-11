@@ -279,7 +279,6 @@ class XRAuroraDataset(Dataset):
         self.init_timestamps = self._get_init_timestamps()
         
         if drop_timestamps:
-            warnings.warn("Dropping timestamps that are not used for initialisation.")
             self.surface_ds = self.surface_ds.sel(time=self.init_timestamps.flatten())
             self.atmospheric_ds = self.atmospheric_ds.sel(time=self.init_timestamps.flatten())
         

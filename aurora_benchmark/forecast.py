@@ -65,6 +65,9 @@ def aurora_forecast(
     eval_start: str="1W", # 1 week
     aurora_model: str="aurora-0.25-pretrained.ckpt",
     device: str|torch.device="cuda" if torch.cuda.is_available() else "cpu",
+    rechunk: bool=False,
+    drop_timestamps: bool=False,
+    persist: bool=False,
     verbose: bool=True,
 ): 
     
@@ -89,7 +92,7 @@ def aurora_forecast(
         raise NotImplementedError("Replacement variables not yet implemented.")
     
     # dask
-    chunks = {"time": 4*batch_size, "latitude": 721, "longitude": 1440}
+    chunks = {"time": 50*batch_size, "latitude": 721, "longitude": 1440}
     
     # load xr data
     verbose_print(verbose, "Reading data ...")
@@ -116,6 +119,9 @@ def aurora_forecast(
         init_frequency=init_frequency,
         forecast_horizon=forecast_horizon,
         num_time_samples=2, # Aurora has fixed history length of 2...
+        drop_timestamps=drop_timestamps,
+        persist=persist,
+        rechunk=rechunk
     )
     verbose_print(verbose, f"Loaded dataset of length {len(dataset)}")
     
@@ -124,7 +130,7 @@ def aurora_forecast(
         dataset, 
         batch_size=batch_size, 
         collate_fn=aurora_batch_collate_fn,
-        num_workers=2
+        num_workers=int(os.getenv('SLURM_CPUS_PER_TASK', 1))+2 if os.getenv('SLURM_CPUS_PER_TASK') is not None else os.cpu_count()+2
     )
     
     # model
