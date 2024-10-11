@@ -147,7 +147,7 @@ def aurora_forecast(
     model = model.to(device)
     
     # evaluation loop
-    verbose_print(verbose, "Starting evaluation ...")
+    verbose_print(verbose, f"Starting evaluation on {device}...")
     xr_preds = {"surface_ds": [], "atmospheric_ds": []}
     with torch.inference_mode() and torch.no_grad():
         for i, batch in enumerate(eval_loader):
@@ -209,14 +209,14 @@ def aurora_forecast(
     for var_type, var_ds_list in xr_preds.items():
         ds = xr.merge(var_ds_list).rename(INVERTED_AURORA_VARAIBLE_RENAMES[var_type])
         verbose_print(verbose, f"Writing {var_type} predictions ...")
-        for var in ds.data_vars:
-            for lead_time in np.unique(ds.lead_time.values).astype("timedelta64[h]"):
+        for lead_time in np.unique(ds.lead_time.values).astype("timedelta64[h]"):
+            for var in ds.data_vars:
                 
                 # TODO: lead time based on eval_aggregation??
                 lead_time = f"{lead_time}h"
                 
                 xr_to_netcdf(
-                    ds[var].sel(lead_time=lead_time),
+                    ds.sel(lead_time=lead_time)[var],
                     os.path.join(
                         output_dir,
                         f"{var}-{start_year}-{end_year}-{era5_base_frequency}-{init_frequency}-{forecast_horizon}-{lead_time}-{resolution}.nc"
