@@ -18,9 +18,9 @@ logger = logging.getLogger(__name__)
 
 AURORA_VARIABLE_NAMES_MAP = {
     # surface
-    '10m_u_component_of_wind': 'u10',
-    '10m_v_component_of_wind': 'v10',
-    '2m_temperature': 't2m',
+    '10m_u_component_of_wind': '10u',
+    '10m_v_component_of_wind': '10v',
+    '2m_temperature': '2t',
     'mean_sea_level_pressure': 'msl',
     'sea_surface_temperature': 'sst',
     'total_precipitation_6hr': 'tp',
@@ -33,7 +33,7 @@ AURORA_VARIABLE_NAMES_MAP = {
     # static
     'geopotential': 'z',
     'land_sea_mask': 'lsm',
-    'soil_type': 'stype',
+    'soil_type': 'slt',
 }
 
 # Create a reverse dictionary for inverse lookup
