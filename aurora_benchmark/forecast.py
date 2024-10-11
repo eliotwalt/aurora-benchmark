@@ -71,6 +71,9 @@ def aurora_forecast(
     verbose: bool=True,
 ): 
     
+    verbose_print(verbose, "Setting CUDA_LAUNCH_BLOCKING to 1. This should be removed in production.")
+    os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+    
     os.makedirs(output_dir, exist_ok=True)
     
     # compute additional arguments
