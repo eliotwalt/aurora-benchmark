@@ -81,6 +81,8 @@ def aurora_forecast(
     assert aurora_model in AURORA_MODELS_HF, f"Model {aurora_model} not found in {AURORA_MODELS_HF}"
     assert forecast_steps.is_integer(), f"forecast_horizon not a multiple of frequency"
     assert warmup_steps.is_integer(), f"eval_start not a multiple of frequency"
+    forecast_steps = int(forecast_steps)
+    warmup_steps = int(warmup_steps)    
     
     # not implementated protection
     if eval_aggregation is not None:
