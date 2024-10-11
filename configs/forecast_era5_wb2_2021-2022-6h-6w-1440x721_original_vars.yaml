@@ -34,7 +34,7 @@ forecast_horizon: 6w
 eval_aggregation: null
 eval_start: 1w
 aurora_model: aurora-0.25-pretrained.ckpt
-rechunk: false
+rechunk: true
 drop_timestamps: true
 persist: false
 verbose: true
