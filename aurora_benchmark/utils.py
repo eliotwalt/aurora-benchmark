@@ -75,9 +75,6 @@ def compute_climatology(
             The climatology dataset with required statistics.
     """
     
-    if not frequency.endswith("H") and int(frequency[:-1]) > 1:
-        raise NotImplementedError(f"{frequency} is not supported.")
-    
     # resample the dataset to the given frequency
     if resample:
         ds = resample_dataset(ds, frequency)
