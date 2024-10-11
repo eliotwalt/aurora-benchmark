@@ -2,6 +2,8 @@ import dask
 import xarray as xr
 import os
 import logging 
+import requests
+import pickle
 
 from aurora_benchmark.utils import (
     compute_climatology, 
@@ -194,3 +196,32 @@ def download_era5_wb2(
         verbose_print(verbose, "No climatology data to compute.")
                 
     verbose_print(verbose, "Download complete.")
+    
+def download_static_hf(
+    output_dir: str,
+    verbose: bool = True
+):
+    verbose_print(verbose, "Downloading static data from HuggingFace...")
+    url = "https://huggingface.co/microsoft/aurora/resolve/main/aurora-0.25-static.pickle"
+    response = requests.get(url)
+    with open("/projects/prjs0981/ewalt/aurora_benchmark/data/era5_wb2/2021-2022-6h-1444x721/static.pickle", "wb") as f:
+        f.write(response.content)
+        
+    with open("/projects/prjs0981/ewalt/aurora_benchmark/data/era5_wb2/2021-2022-6h-1444x721/static.pickle", "rb") as f:
+        static = pickle.load(f)
+        
+    static_ds = xr.Dataset({var: (("latitude", "longitude"), data) for var, data in static.items()})
+    
+    for var in static_ds.data_vars:
+        verbose_print(verbose, f"Saving {var} static dataset to disk...")
+        xr_to_netcdf(    
+            static_ds[var],
+            os.path.join(
+                output_dir, 
+                f'{var}_static-1440x721.nc'
+            ),
+            precision="float32",
+            compression_level=0,
+            sort_time=False,
+            exist_ok=True
+        )

@@ -34,9 +34,7 @@ AURORA_VARAIBLE_RENAMES = {
         "t2m": "2t",
     },
     "atmospheric": {},
-    "static": {
-        "stype": "slt"
-    },
+    "static": {},
 }
 INVERTED_AURORA_VARAIBLE_RENAMES = {
     "surface": {v: k for k, v in AURORA_VARAIBLE_RENAMES["surface"].items()},

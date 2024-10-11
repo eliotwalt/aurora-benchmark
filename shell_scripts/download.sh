@@ -1,6 +1,6 @@
 #!/bin/bash
 
-DOWNLOAD_CONFIG=./configs/download_era5_wb2_1979-2022-6h-1444x721.yaml
+DOWNLOAD_CONFIG=./configs/download_era5_wb2_1979-2022-6h-1440x721.yaml
 HOST_CONFIG=./configs/snellius.yaml
 
 # activate CPU environment

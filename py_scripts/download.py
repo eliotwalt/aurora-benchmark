@@ -4,7 +4,7 @@ import yaml
 import logging
 # from dask.distributed import Client, LocalCluster
 
-from aurora_benchmark.download import download_era5_wb2
+from aurora_benchmark.download import download_era5_wb2, download_static_hf
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from py_scripts.download_task_array import get_job_config
@@ -56,11 +56,13 @@ if __name__ == "__main__":
     download_config["output_dir"] = os.path.join(host_config["data_root_dir"], download_config["output_dir"])
     download_config["output_dir_climatology"] = os.path.join(host_config["data_root_dir"], download_config["output_dir_climatology"])
 
-    # check whether we are running in a slurm array job
-    if os.environ.get("SLURM_ARRAY_TASK_ID", None) is not None:
-        task_id = int(os.environ["SLURM_ARRAY_TASK_ID"])
-        download_config = get_job_config(download_config, task_id)
-    download_era5_wb2(**download_config)
+    # # check whether we are running in a slurm array job
+    # if os.environ.get("SLURM_ARRAY_TASK_ID", None) is not None:
+    #     task_id = int(os.environ["SLURM_ARRAY_TASK_ID"])
+    #     download_config = get_job_config(download_config, task_id)
+    # download_era5_wb2(**download_config)
+    
+    download_static_hf(download_config["output_dir"], download_config["verbose"])
     
     # # close dask cluster
     # client.close()

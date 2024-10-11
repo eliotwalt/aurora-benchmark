@@ -1,6 +1,6 @@
 #!/bin/bash
 
-FORECAST_CONFIG=./configs/forecast_era5_wb2_2021-2022-6h-6w-1444x721_original_vars.yaml
+FORECAST_CONFIG=./configs/forecast_era5_wb2_2021-2022-6h-6w-1440x721_original_vars.yaml
 HOST_CONFIG=./configs/snellius.yaml
 
 # activate CPU environment
