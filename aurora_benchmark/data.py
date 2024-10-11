@@ -56,17 +56,19 @@ def xr_to_aurora_batch(
     longitudes = torch.Tensor(sorted(atmospheric_ds.longitude.values, reverse=False))
     if longitudes.min() == -180.0:
         longitudes += 180.0
+    # get shapes for explicit reshaping
+    T, C, H, W = atmospheric_ds[atmospheric_variables[0]].shape
     return Batch(
         surf_vars = {
-            var: torch.from_numpy(surface_ds[var].values).unsqueeze(0)
+            var: torch.from_numpy(surface_ds[var].values).reshape(1, T, H, W)
             for var in surface_variables
         },
         atmos_vars = {
-            var: torch.from_numpy(atmospheric_ds[var].values).unsqueeze(0)
+            var: torch.from_numpy(atmospheric_ds[var].values).reshape(1, T, C, H, W)
             for var in atmospheric_variables
         },
         static_vars = {
-            var: torch.from_numpy(static_ds[var].values)
+            var: torch.from_numpy(static_ds[var].values).reshape(H, W)
             for var in static_variables
         },
         metadata=Metadata(
@@ -222,7 +224,10 @@ class XRAuroraDataset(Dataset):
         atmospheric_variables: list[str]=AURORA_VARIABLE_NAMES["atmospheric"],
         static_variables: list[str]=AURORA_VARIABLE_NAMES["static"],
         pressure_levels: list[int]=AURORA_PRESSURE_LEVELS,
-        replacement_variables: dict[str, str]={}, 
+        replacement_variables: dict[str, str]={},
+        drop_timestamps: bool=False,
+        rechunk: bool=False,
+        persist: bool=False,
     ) -> None:
         """
         Initialise the XRAuroraDataset.
@@ -252,6 +257,12 @@ class XRAuroraDataset(Dataset):
                 A dictionary of replacement variables, i.e. {'q_850': 'tp'}
                 means that `q_850` will be replaced with `tp` without telling
                 the model. Defaults to an empty dictionary.
+            drop_timestamps: bool
+                Whether to drop the timestamps that are not used for initialisation. Defaults to False.
+            rechunk: bool
+                Whether to rechunk the dataset. Defaults to False.
+            persist: bool
+                Whether to persist the datasets. Defaults to False.
         """
         super().__init__()
         self.surface_ds = surface_ds.sortby("time")
@@ -267,6 +278,27 @@ class XRAuroraDataset(Dataset):
         self.replacement_variables = replacement_variables        
         self.init_timestamps = self._get_init_timestamps()
         
+        if drop_timestamps:
+            warnings.warn("Dropping timestamps that are not used for initialisation.")
+            self.surface_ds = self.surface_ds.sel(time=self.init_timestamps.flatten())
+            self.atmospheric_ds = self.atmospheric_ds.sel(time=self.init_timestamps.flatten())
+        
+        if rechunk:
+            # check if the dataset is already chunked
+            if not self.surface_ds.chunks and not self.atmospheric_ds.chunks:
+                warnings.warn("The datasets are not chunked. Chunking the dataset may reduce performance. Consider setting rechunk to `False`.")
+            # compute the closest multitple of self.num_time_samples from the current time chunk
+            current_time_chunk = self.surface_ds.chunks["time"][0]
+            new_time_chunk = current_time_chunk - (current_time_chunk % self.num_time_samples)
+            self.surface_ds = self.surface_ds.chunk({"time": new_time_chunk})
+            self.atmospheric_ds = self.atmospheric_ds.chunk({"time": new_time_chunk})
+            
+        # Persist the datasets to avoid recomputation and manage memory efficiently
+        if persist:
+            self.surface_ds = self.surface_ds.persist()
+            self.atmospheric_ds = self.atmospheric_ds.persist()
+            self.static_ds = self.static_ds.persist()
+            
         if init_frequency != "1D":
             warnings.warn("The init_frequency is not 1 day. This has not been tested.")
         

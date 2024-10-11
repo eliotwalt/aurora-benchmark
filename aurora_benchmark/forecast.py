@@ -129,7 +129,7 @@ def aurora_forecast(
         num_workers=2
     )
     
-    # mode
+    # model
     if "small" in aurora_model:
         verbose_print(verbose, "Loading AuroraSmall model ...")
         model = AuroraSmall()
