@@ -1,10 +1,7 @@
 gs_url: gs://weatherbench2/datasets/era5/1959-2022-6h-1440x721.zarr
-output_dir: data/era5_wb2/2021-2022-6h-1444x721/ 
-output_dir_climatology: data/era5_wb2_climatology/1991-2022-6h-1444x721/
-static_variables:
-  - geopotential
-  - land_sea_mask
-  - soil_type
+output_dir: data/era5_wb2/2021-2022-6h-1440x721/ 
+output_dir_climatology: data/era5_wb2_climatology/1991-2022-6h-1440x721/
+static_variables: [] # get them straight from HF
 surface_variables:
   - 2m_temperature
   - 10m_u_component_of_wind
@@ -33,7 +30,8 @@ pressure_levels:
   - 925
   - 1000
 climatology_frequencies:
-  - 1W
+  - 1d
+  - 1w
 climatology_years:
   - 1991
   - 2020
@@ -41,7 +39,5 @@ eval_years:
   - 2021
   - 2022
 verbose: true
-percentiles: [66, 95, 33, 5]
-percentile_variables:
-  - 2m_temperature
-  - total_precipitation_6hr
+percentiles: []
+percentile_variables: []

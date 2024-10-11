@@ -138,7 +138,7 @@ def download_era5_wb2(
                     f'{variable_name}_static-{spatial_resolution}.nc'
                 ),
                 precision="float32",
-                compression_level=0,
+                compression_level=1,
                 sort_time=False,
                 exist_ok=True
             )
@@ -188,7 +188,7 @@ def download_era5_wb2(
                         f'climatology_{variable_name}_{climatology_years[0]}-{climatology_years[1]}-{base_frequency}-{climatology_frequency.lower()}-{spatial_resolution}.nc'
                     ),
                     precision="float32",
-                    compression_level=0,
+                    compression_level=1,
                     sort_time=False,
                     exist_ok=True
                 )
@@ -221,7 +221,7 @@ def download_static_hf(
                 f'{var}_static-1440x721.nc'
             ),
             precision="float32",
-            compression_level=0,
+            compression_level=1,
             sort_time=False,
             exist_ok=True
         )
