@@ -20,5 +20,5 @@ variable=${variables[${SLURM_ARRAY_TASK_ID}]}
 echo "Processing ${variable}"
 
 input=/projects/prjs0981/ewalt/aurora_benchmark/data/era5_wb2/2021-2022-6h-1444x721/${variable}_2021-2022-6h-1440x721.nc
-output=tmp_data/${variable}-2021-2022-1d-360x180.nc
+output=./toy_data/era5-1d-360x180/${variable}-2021-2022-1d-360x180.nc
 cdo -f nc -b F32 -daymean -remapbil,r360x180 $input $output
