@@ -57,7 +57,10 @@ def xr_to_aurora_batch(
     if longitudes.min() == -180.0:
         longitudes += 180.0
     # get shapes for explicit reshaping
-    T, C, H, W = atmospheric_ds[atmospheric_variables[0]].shape
+    C = atmospheric_ds.sizes["level"]
+    T = atmospheric_ds.sizes["time"]
+    H = atmospheric_ds.sizes["latitude"]
+    W = atmospheric_ds.sizes["longitude"]
     return Batch(
         surf_vars = {
             var: torch.from_numpy(surface_ds[var].values).reshape(1, T, H, W)
@@ -279,8 +282,9 @@ class XRAuroraDataset(Dataset):
         self.init_timestamps = self._get_init_timestamps()
         
         if drop_timestamps:
-            self.surface_ds = self.surface_ds.sel(time=self.init_timestamps.flatten())
-            self.atmospheric_ds = self.atmospheric_ds.sel(time=self.init_timestamps.flatten())
+            flat_init_timestamps = np.unique(self.init_timestamps.flatten()).tolist()
+            self.surface_ds = self.surface_ds.sel(time=flat_init_timestamps).assign_coords(time=flat_init_timestamps)
+            self.atmospheric_ds = self.atmospheric_ds.sel(time=flat_init_timestamps).assign_coords(time=flat_init_timestamps)
         
         if rechunk:
             # check if the dataset is already chunked

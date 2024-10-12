@@ -16,7 +16,7 @@ variables=(msl q sst t t2m tp u10 u v10 v z)
 
 mkdir -p ./toy_data/era5-1d-360x180/
 
-variable=${variables[${SLURM_ARRAY_TASK_ID}]}
+variable=${variables[$((SLURM_ARRAY_TASK_ID - 1))]}
 echo "Processing ${variable}"
 
 input=/projects/prjs0981/ewalt/aurora_benchmark/data/era5_wb2/2021-2022-6h-1444x721/${variable}_2021-2022-6h-1440x721.nc

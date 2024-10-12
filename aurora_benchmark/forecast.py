@@ -27,7 +27,7 @@ AURORA_MODELS_HF = [
     "aurora-0.25-pretrained.ckpt"
 ]
 
-AURORA_VARAIBLE_RENAMES = {
+AURORA_VARIABLE_RENAMES = {
     "surface": {
         "u10": "10u",
         "v10": "10v",
@@ -36,10 +36,10 @@ AURORA_VARAIBLE_RENAMES = {
     "atmospheric": {},
     "static": {},
 }
-INVERTED_AURORA_VARAIBLE_RENAMES = {
-    "surface": {v: k for k, v in AURORA_VARAIBLE_RENAMES["surface"].items()},
-    "atmospheric": {v: k for k, v in AURORA_VARAIBLE_RENAMES["atmospheric"].items()},
-    "static": {v: k for k, v in AURORA_VARAIBLE_RENAMES["static"].items()},
+INVERTED_AURORA_VARIABLE_RENAMES = {
+    "surface": {v: k for k, v in AURORA_VARIABLE_RENAMES["surface"].items()},
+    "atmospheric": {v: k for k, v in AURORA_VARIABLE_RENAMES["atmospheric"].items()},
+    "static": {v: k for k, v in AURORA_VARIABLE_RENAMES["static"].items()},
 }
 
 def get_path_metadata(path: str):
@@ -100,19 +100,27 @@ def aurora_forecast(
     # load xr data
     verbose_print(verbose, "Reading data ...")
     surface_ds = xr.merge(
-        [xr.open_dataset(path, engine="netcdf4", 
-                         chunks={"time": time_chunk, "latitude": 721, "longitude": 1440}) 
+        [xr.open_dataset(path, engine="h5netcdf", 
+                         chunks={"time": time_chunk, "latitude": 721, "longitude": 1440},
+                         )#backend_kwargs={'diskless': True, 'persist': False}) 
          for path in era5_surface_paths],
-    ).rename(AURORA_VARAIBLE_RENAMES["surface"])
+    )#.rename(AURORA_VARIABLE_RENAMES["surface"])
     atmospheric_ds = xr.merge(
-        [xr.open_dataset(path, engine="netcdf4",
-                         chunks={"time": time_chunk, "latitude": 721, "longitude": 1440, "level": 7}) 
+        [xr.open_dataset(path, engine="h5netcdf",
+                         chunks={"time": time_chunk, "latitude": 721, "longitude": 1440, "level": 7},
+                         )#backend_kwargs={'diskless': True, 'persist': False}) 
          for path in era5_atmospheric_paths],
-    ).rename(AURORA_VARAIBLE_RENAMES["atmospheric"])
+    )#.rename(AURORA_VARIABLE_RENAMES["atmospheric"])
     static_ds = xr.merge(
-        [xr.open_dataset(path, engine="netcdf4")
+        [xr.open_dataset(path, engine="h5netcdf",
+                         )#backend_kwargs={'diskless': True, 'persist': False})
          for path in era5_static_paths],
-    ).rename(AURORA_VARAIBLE_RENAMES["static"])
+    )#.rename(AURORA_VARIABLE_RENAMES["static"])
+    
+    # feedback dims
+    verbose_print(verbose, f"surface_ds: {surface_ds.dims}")
+    verbose_print(verbose, f"atmospheric_ds: {atmospheric_ds.dims}")
+    verbose_print(verbose, f"static_ds: {static_ds.dims}")
     
     # create dataset XRAuroraDataset
     dataset = XRAuroraDataset(
@@ -126,14 +134,16 @@ def aurora_forecast(
         persist=persist,
         rechunk=rechunk
     )
-    verbose_print(verbose, f"Loaded dataset of length {len(dataset)}")
+    verbose_print(verbose, f"Loaded dataset of length {len(dataset)} (drop_timestamps={drop_timestamps}, persist={persist}, rechunk={rechunk})")
     
     # create dataloader
+    num_workers = int(os.getenv('SLURM_CPUS_PER_TASK', 1))+2 if os.getenv('SLURM_CPUS_PER_TASK') is not None else os.cpu_count()+2
+    verbose_print(verbose, f"Creating DataLoader with {num_workers} workers ...")
     eval_loader = DataLoader(
         dataset, 
         batch_size=batch_size, 
         collate_fn=aurora_batch_collate_fn,
-        num_workers=int(os.getenv('SLURM_CPUS_PER_TASK', 1))+2 if os.getenv('SLURM_CPUS_PER_TASK') is not None else os.cpu_count()+2
+        num_workers=num_workers
     )
     
     # model
@@ -207,7 +217,7 @@ def aurora_forecast(
             
     # merge predictions and save
     for var_type, var_ds_list in xr_preds.items():
-        ds = xr.concat(var_ds_list, dim="time").rename(INVERTED_AURORA_VARAIBLE_RENAMES[var_type])
+        ds = xr.concat(var_ds_list, dim="time")#.rename(INVERTED_AURORA_VARIABLE_RENAMES[var_type])
         verbose_print(verbose, f"Writing {var_type} predictions ...")
         for lead_time in np.unique(ds.lead_time.values).astype("timedelta64[h]"):
             for var in ds.data_vars:
