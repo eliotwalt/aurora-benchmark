@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=64G
-#SBATCH --time=:00:00
+#SBATCH --time=30:00:00
 #SBATCH --output=./logs/toy_era5/%A_%a.out
 #SBATCH --error=./logs/toy_era5/%A_%a.out
 #SBATCH --job-name=small_era5
