@@ -14,7 +14,7 @@ module load CDO/2.2.2-gompi-2023a
 # find all the variables as /projects/prjs0981/ewalt/aurora_benchmark/data/era5_wb2/2021-2022-6h-1444x721/${variable}_2021-2022-6h-1440x721.nc
 variables=(msl q sst t t2m tp u10 u v10 v z)
 
-mkdir -p tmp_data
+mkdir -p ./toy_data/era5-1d-360x180/
 
 variable=${variables[${SLURM_ARRAY_TASK_ID}]}
 echo "Processing ${variable}"
