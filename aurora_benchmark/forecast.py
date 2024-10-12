@@ -100,19 +100,19 @@ def aurora_forecast(
     # load xr data
     verbose_print(verbose, "Reading data ...")
     surface_ds = xr.merge(
-        [xr.open_dataset(path, engine="h5netcdf", 
+        [xr.open_dataset(path, engine="netcdf4", 
                          chunks={"time": time_chunk, "latitude": 721, "longitude": 1440},
                          )#backend_kwargs={'diskless': True, 'persist': False}) 
          for path in era5_surface_paths],
     )#.rename(AURORA_VARIABLE_RENAMES["surface"])
     atmospheric_ds = xr.merge(
-        [xr.open_dataset(path, engine="h5netcdf",
+        [xr.open_dataset(path, engine="netcdf4",
                          chunks={"time": time_chunk, "latitude": 721, "longitude": 1440, "level": 7},
                          )#backend_kwargs={'diskless': True, 'persist': False}) 
          for path in era5_atmospheric_paths],
     )#.rename(AURORA_VARIABLE_RENAMES["atmospheric"])
     static_ds = xr.merge(
-        [xr.open_dataset(path, engine="h5netcdf",
+        [xr.open_dataset(path, engine="netcdf4",
                          )#backend_kwargs={'diskless': True, 'persist': False})
          for path in era5_static_paths],
     )#.rename(AURORA_VARIABLE_RENAMES["static"])
@@ -137,13 +137,13 @@ def aurora_forecast(
     verbose_print(verbose, f"Loaded dataset of length {len(dataset)} (drop_timestamps={drop_timestamps}, persist={persist}, rechunk={rechunk})")
     
     # create dataloader
-    num_workers = int(os.getenv('SLURM_CPUS_PER_TASK', 1))+2 if os.getenv('SLURM_CPUS_PER_TASK') is not None else os.cpu_count()+2
+    num_workers = 1 #int(os.getenv('SLURM_CPUS_PER_TASK', 1))+2 if os.getenv('SLURM_CPUS_PER_TASK') is not None else os.cpu_count()+2
     verbose_print(verbose, f"Creating DataLoader with {num_workers} workers ...")
     eval_loader = DataLoader(
         dataset, 
         batch_size=batch_size, 
         collate_fn=aurora_batch_collate_fn,
-        num_workers=num_workers
+        num_workers=num_workers,
     )
     
     # model
