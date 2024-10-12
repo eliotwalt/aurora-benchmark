@@ -47,11 +47,20 @@ def xr_to_aurora_batch(
 ) -> Batch:
     """ 
     inspired by https://microsoft.github.io/aurora/example_era5.html
+    and https://microsoft.github.io/aurora/example_hres_t0.html
     """ 
+    def prepare_array(x: np.ndarray, shape: tuple[int], flip: bool) -> torch.Tensor:
+        if flip:
+            return torch.from_numpy(x.reshape(shape)[...,::-1,:].copy())
+        else:
+            return torch.from_numpy(x.reshape(shape).copy())
     # ensure only 2 timesteps
+    # Converting to `datetime64[s]` ensures that the output of `tolist()` gives
+    # `datetime.datetime`s. Note that this needs to be a tuple of length one:
+    # one value for every batch element.
     times = surface_ds.time.values.astype("datetime64[s]").tolist()
     assert len(times) == 2, f"Aurora requires 2 time samples, got {len(times)}."
-    _time = times[1] # only the second time sample (i.e. current step)
+    _time = (times[1],) # only the second time sample (i.e. current step)
     # ensure longitudes start at 0
     longitudes = torch.Tensor(sorted(atmospheric_ds.longitude.values, reverse=False))
     if longitudes.min() == -180.0:
@@ -61,25 +70,41 @@ def xr_to_aurora_batch(
     T = atmospheric_ds.sizes["time"]
     H = atmospheric_ds.sizes["latitude"]
     W = atmospheric_ds.sizes["longitude"]
+    # get lats in decreasing order
+    if surface_ds.latitude.values[0] < surface_ds.latitude.values[1]: # i.e. increasing
+        lats = torch.from_numpy(surface_ds.latitude.values[::-1].copy())
+    else:
+        lats = torch.from_numpy(surface_ds.latitude.values.copy())
+    # get lons in increasing order
+    if atmospheric_ds.longitude.values[0] < atmospheric_ds.longitude.values[1]: # i.e. increasing
+        lons = torch.from_numpy(atmospheric_ds.longitude.values.copy())
+    else:
+        lons = torch.from_numpy(atmospheric_ds.longitude.values[::-1].copy())
     return Batch(
         surf_vars = {
-            var: torch.from_numpy(surface_ds[var].values).reshape(1, T, H, W)
+            var: prepare_array(
+                surface_ds[var].values, 
+                (1, T, H, W),
+                surface_ds.latitude.values[0] < surface_ds.latitude.values[1]) #torch.from_numpy(surface_ds[var].values).reshape(1, T, H, W)
             for var in surface_variables
         },
         atmos_vars = {
-            var: torch.from_numpy(atmospheric_ds[var].values).reshape(1, T, C, H, W)
+            var: prepare_array(
+                atmospheric_ds[var].values, 
+                (1, T, C, H, W),
+                atmospheric_ds.latitude.values[0] < atmospheric_ds.latitude.values[1]) # torch.from_numpy(atmospheric_ds[var].values).reshape(1, T, C, H, W)
             for var in atmospheric_variables
         },
         static_vars = {
-            var: torch.from_numpy(static_ds[var].values).reshape(H, W)
+            var: prepare_array(
+                static_ds[var].values, 
+                (H, W),
+                static_ds.latitude.values[0] < static_ds.latitude.values[1]) #torch.from_numpy(static_ds[var].values).reshape(H, W)
             for var in static_variables
         },
         metadata=Metadata(
-            lat=torch.Tensor(sorted(atmospheric_ds.latitude.values, reverse=True)),
-            lon=torch.Tensor(sorted(atmospheric_ds.longitude.values, reverse=False)),
-            # Converting to `datetime64[s]` ensures that the output of `tolist()` gives
-            # `datetime.datetime`s. Note that this needs to be a tuple of length one:
-            # one value for every batch element.
+            lat=lats,
+            lon=lons,
             time=_time,
             atmos_levels=tuple(int(level) for level in atmospheric_ds.level.values),
         )
@@ -163,6 +188,14 @@ def aurora_batch_to_xr(batch: Batch, frequency: str) -> dict[str, xr.Dataset]:
     }
 
 def aurora_batch_collate_fn(batches: list[Batch]) -> Batch:
+    # Prediction batches have a single time sample apparently
+    times = []
+    for batch in batches:
+        time = batch.metadata.time
+        if isinstance(time, tuple):
+            times.append(time[0])
+        else:
+            times.append(time)        
     return Batch(
         surf_vars={
             var: torch.cat([batch.surf_vars[var] for batch in batches], dim=0)
@@ -179,7 +212,7 @@ def aurora_batch_collate_fn(batches: list[Batch]) -> Batch:
         metadata=Metadata(
             lat=batches[0].metadata.lat,
             lon=batches[0].metadata.lon,
-            time=tuple(batch.metadata.time for batch in batches),
+            time=tuple(times),
             atmos_levels=batches[0].metadata.atmos_levels,
         )
     )
@@ -352,7 +385,7 @@ class XRAuroraDataset(Dataset):
         return xr_to_aurora_batch(
             self.surface_ds.sel(time=batch_timestamps).compute(),
             self.atmospheric_ds.sel(time=batch_timestamps).compute(),
-            self.static_ds,
+            self.static_ds.compute(),
             surface_variables=self.surface_variables,
             static_variables=self.static_variables,
             atmospheric_variables=self.atmospheric_variables
