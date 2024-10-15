@@ -430,18 +430,18 @@ class XRAuroraBatchedDataset(XRAuroraDataset):
     def __getitem__(self, k: int) -> Batch:
         if k == -1: k = self.__len__() - 1
         batch_timestamps = self.init_timestamps[k*self.batch_size:(k+1)*self.batch_size]
-        batch = None
+        batches = []
         
         # TODO: xr_to_aurora_batch for batch_size > 1 would allow for parallelisation
         #   i.e. no for loop.
         
         for bts in batch_timestamps:
-            batch = aurora_batch_collate_fn([batch, xr_to_aurora_batch(
+            batches.append(xr_to_aurora_batch(
                 self.surface_ds.sel(time=bts).compute(),
                 self.atmospheric_ds.sel(time=bts).compute(),
                 self.static_ds.compute(),
                 surface_variables=self.surface_variables,
                 static_variables=self.static_variables,
                 atmospheric_variables=self.atmospheric_variables
-            )])
-        return batch
+            ))
+        return aurora_batch_collate_fn(batches)

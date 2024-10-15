@@ -29,7 +29,7 @@ interest_levels:
   - 500
 batch_size: 1
 era5_base_frequency: 6h
-init_frequency: 3.5d
+init_frequency: 1w
 forecast_horizon: 6w
 eval_aggregation: 1w
 eval_start: 1w

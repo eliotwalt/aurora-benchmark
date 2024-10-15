@@ -81,8 +81,9 @@ def aurora_forecast(
     assert aurora_model in AURORA_MODELS_HF, f"Model {aurora_model} not found in {AURORA_MODELS_HF}"
     assert forecast_steps.is_integer(), f"forecast_horizon not a multiple of frequency"
     assert warmup_steps.is_integer(), f"eval_start not a multiple of frequency"
+    assert (forecast_steps-warmup_steps) * pd.Timedelta(era5_base_frequency) >= pd.Timedelta(eval_aggregation), "Evaluation steps must be at least as long as eval_aggregation" 
     forecast_steps = int(forecast_steps)
-    warmup_steps = int(warmup_steps)    
+    warmup_steps = int(warmup_steps)
     
     # not implementated protection
     if len(replacement_variables) > 0:
@@ -173,6 +174,7 @@ def aurora_forecast(
     # evaluation loop
     verbose_print(verbose, f"Starting evaluation on {device}...")
     with torch.inference_mode() and torch.no_grad():
+        
         for i, batch in enumerate(eval_loader):
             batch = batch.to(device)
             # rollout until for forecast_steps
@@ -185,10 +187,12 @@ def aurora_forecast(
                 # separate batched batches
                 sub_batch_preds = unpack_aurora_batch(batch_pred.to("cpu"))
                 verbose_print(verbose, f" * Rollout step {s+1}: unpacked {len(sub_batch_preds)} sub-batches")
-                assert len(sub_batch_preds) == batch_size
+                if i != len(eval_loader) - 1: # the last batch may not be full
+                    assert len(sub_batch_preds) == batch_size
                 # accumulate
                 for b, sub_batch_pred in enumerate(sub_batch_preds):
                     trajectories[b].append(sub_batch_pred)
+                    
             verbose_print(verbose, f"Processing trajectories ...")
             # convert to xr 
             for init_time, trajectory in zip(batch.metadata.time, trajectories):
@@ -198,7 +202,8 @@ def aurora_forecast(
                 trajectory = aurora_batch_collate_fn(trajectory)
                 # convert to xr.Dataset
                 trajectory = aurora_batch_to_xr(trajectory, frequency=era5_base_frequency)
-                # add lead time
+                
+                # process individual trajectory elements (i.e. variable types)
                 for var_type, vars_ds in trajectory.items():
                     # ensure processing is necessary
                     if var_type == "static_ds":
@@ -218,18 +223,26 @@ def aurora_forecast(
                     else:
                         vars_ds = vars_ds[vars_interest_variables]
                         
+                    # override time coordinates using the era5_base_frequency
+                    # this is necessary because Aurora assumes timesteps of 6h
+                    # but we can theoretically use any frequency
+                    vars_ds = vars_ds.assign_coords(
+                        {"time": pd.date_range(init_time+warmup_steps*pd.Timedelta(era5_base_frequency), 
+                                            periods=vars_ds.sizes["time"], 
+                                            freq=era5_base_frequency)})    
+                        
                     # aggregate at eval_agg frequency
                     # use pd.Timedelta to avoid xarray automatically starting the resampling 
                     # on Mondays for weekly etc.
                     # Note that resulting 'time' will be the first timestamp in the aggregated period
                     vars_ds = vars_ds.resample(time=pd.Timedelta(eval_aggregation), origin=init_time).mean()
-                
+                    vars_ds = vars_ds.rename({"time": "lead_time"})
+                    vars_ds["lead_time"] = vars_ds["lead_time"] - np.datetime64(init_time)
+                    
                     # per-variable processing
                     for var in vars_ds.data_vars:
                         # add lead time
-                        var_ds = vars_ds[var].to_dataset(name=var)
-                        var_ds = var_ds.assign_coords({"lead_time": var_ds.time.values - np.datetime64(init_time)})
-                        var_ds = var_ds.set_index({"lead_time": "lead_time"})
+                        var_ds = vars_ds[var]
                         
                         # save
                         path = f"forecast_{var}_" + "-".join([
