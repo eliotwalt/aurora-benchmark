@@ -7,11 +7,11 @@ from torch.utils.data import Dataset
 from aurora import Batch, Metadata
 import logging
 import warnings
+import math
 
 from aurora_benchmark.utils import verbose_print
 
 logger = logging.getLogger(__name__)
-dask.config.set(scheduler='threads')
 
 AURORA_VARIABLE_NAMES = {
     "surface": [
@@ -349,9 +349,6 @@ class XRAuroraDataset(Dataset):
             self.surface_ds = self.surface_ds.persist()
             self.atmospheric_ds = self.atmospheric_ds.persist()
             self.static_ds = self.static_ds.persist()
-            
-        if init_frequency != "1D":
-            warnings.warn("The init_frequency is not 1 day. This has not been tested.")
         
         if len(replacement_variables) > 0:
             raise NotImplementedError("Replacement variables are not yet implemented.")
@@ -424,10 +421,14 @@ class XRAuroraBatchedDataset(XRAuroraDataset):
         super().__init__(*args, **kwargs)
         self.batch_size = batch_size
         
+    def flat_length(self):
+        return self.init_timestamps.shape[0]
+        
     def __len__(self) -> int:
-        return super().__len__() // self.batch_size
+        return math.ceil(self.init_timestamps.shape[0] / self.batch_size)
         
     def __getitem__(self, k: int) -> Batch:
+        if k == -1: k = self.__len__() - 1
         batch_timestamps = self.init_timestamps[k*self.batch_size:(k+1)*self.batch_size]
         batch = None
         

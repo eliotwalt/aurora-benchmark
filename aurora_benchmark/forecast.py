@@ -9,7 +9,7 @@ import logging
 
 from aurora import Aurora, AuroraSmall, rollout
 
-from aurora_benchmark.utils import verbose_print, xr_to_netcdf, update_running_statistics, reduce_running_statistics
+from aurora_benchmark.utils import verbose_print, xr_to_netcdf
 from aurora_benchmark.data import (
     XRAuroraDataset, 
     XRAuroraBatchedDataset,
@@ -18,7 +18,6 @@ from aurora_benchmark.data import (
     unpack_aurora_batch
 )
 
-dask.config.set(scheduler='threads')
 logger = logging.getLogger(__name__)
 
 AURORA_MODELS_HF = [
@@ -40,14 +39,7 @@ INVERTED_AURORA_VARIABLE_RENAMES = {
     "surface": {v: k for k, v in AURORA_VARIABLE_RENAMES["surface"].items()},
     "atmospheric": {v: k for k, v in AURORA_VARIABLE_RENAMES["atmospheric"].items()},
     "static": {v: k for k, v in AURORA_VARIABLE_RENAMES["static"].items()},
-}
-
-def get_path_metadata(path: str):
-    parts = os.path.basename(path).split("-")
-    start_year, end_year = parts[0].split("_")[1], parts[1]
-    resolution = parts[-1].split(".")[0]
-    return start_year, end_year, resolution
-    
+}    
 
 def aurora_forecast(
     era5_surface_paths: list[str],
@@ -70,21 +62,22 @@ def aurora_forecast(
     persist: bool=False,
     verbose: bool=True,
     use_dataloader: bool=False
-): 
-    
-    verbose_print(verbose, "Setting CUDA_LAUNCH_BLOCKING to 1. This should be removed in production.")
-    os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
-    
+):     
     os.makedirs(output_dir, exist_ok=True)
     
     # compute additional arguments
     warmup_steps = pd.Timedelta(eval_start) / pd.Timedelta(era5_base_frequency) if eval_start is not None else 0.0
     forecast_steps = pd.Timedelta(forecast_horizon) / pd.Timedelta(era5_base_frequency)
-    start_year, end_year, resolution = get_path_metadata(era5_surface_paths[0])
     
-    # validate arguments
+    # setup dask scheduler
     if use_dataloader:
-        dask.config.set(scheduler='synchronous')
+        raise NotImplementedError("Dataloader not yet implemented because netcdf+dask is not thread safe. Use_dataloader=False.")
+        # dask.config.set(scheduler='synchronous')
+    else:
+        dask.config.set(scheduler='threads')
+    verbose_print(verbose, f"Using dask scheduler: {dask.config.get('scheduler')}")
+        
+    # validate arguments
     assert aurora_model in AURORA_MODELS_HF, f"Model {aurora_model} not found in {AURORA_MODELS_HF}"
     assert forecast_steps.is_integer(), f"forecast_horizon not a multiple of frequency"
     assert warmup_steps.is_integer(), f"eval_start not a multiple of frequency"
@@ -92,8 +85,6 @@ def aurora_forecast(
     warmup_steps = int(warmup_steps)    
     
     # not implementated protection
-    if eval_aggregation is not None:
-        raise NotImplementedError("Aggregation not yet implemented.")
     if len(replacement_variables) > 0:
         raise NotImplementedError("Replacement variables not yet implemented.")
     
@@ -139,7 +130,6 @@ def aurora_forecast(
             persist=persist,
             rechunk=rechunk
         )
-        verbose_print(verbose, f"Loaded dataset of length {len(dataset)} (drop_timestamps={drop_timestamps}, persist={persist}, rechunk={rechunk})")
         
         num_workers = 1 #int(os.getenv('SLURM_CPUS_PER_TASK', 1))+2 if os.getenv('SLURM_CPUS_PER_TASK') is not None else os.cpu_count()+2
         verbose_print(verbose, f"Creating DataLoader with {num_workers} workers ...")
@@ -149,7 +139,6 @@ def aurora_forecast(
             collate_fn=aurora_batch_collate_fn,
             num_workers=num_workers,
         )
-        batch_iterator = eval_loader
     else:
         # This is done to avoid the issue with torch DataLoader and dask
         # when using netcdf files (i.e. netcdf backend is not thread safe)
@@ -166,7 +155,10 @@ def aurora_forecast(
             persist=persist,
             rechunk=rechunk
         )
-        batch_iterator = dataset
+        eval_loader = dataset
+        
+    verbose_print(verbose, f"Dataset length: {dataset.flat_length() if hasattr(dataset, 'flat_length') else len(dataset)}")
+    verbose_print(verbose, f"Dataloader length: {len(eval_loader)} (type: {type(eval_loader)}, batch_size: {batch_size})")  
     
     # model
     if "small" in aurora_model:
@@ -180,9 +172,8 @@ def aurora_forecast(
     
     # evaluation loop
     verbose_print(verbose, f"Starting evaluation on {device}...")
-    xr_preds = {"surface_ds": [], "atmospheric_ds": []}
     with torch.inference_mode() and torch.no_grad():
-        for i, batch in enumerate(batch_iterator):
+        for i, batch in enumerate(eval_loader):
             batch = batch.to(device)
             # rollout until for forecast_steps
             verbose_print(verbose, f"Rollout prediction on batch {i} ...")
@@ -230,15 +221,15 @@ def aurora_forecast(
                     # aggregate at eval_agg frequency
                     # use pd.Timedelta to avoid xarray automatically starting the resampling 
                     # on Mondays for weekly etc.
-                    # Note that resulting'time' will be the first timestamp in the aggregated period
-                    var_ds = var_ds.resample(time=pd.Timedelta(eval_aggregation), origin=init_time).mean()
-                    
+                    # Note that resulting 'time' will be the first timestamp in the aggregated period
+                    vars_ds = vars_ds.resample(time=pd.Timedelta(eval_aggregation), origin=init_time).mean()
+                
                     # per-variable processing
-                    for var in var_ds.data_vars:
+                    for var in vars_ds.data_vars:
                         # add lead time
-                        sub_ds = var_ds[var].to_dataset(name=var)
-                        sub_ds = sub_ds.assign_coords( {"lead_time": sub_ds.time.values - np.datetime64(init_time)})
-                        sub_ds = sub_ds.set_index({"lead_time": "lead_time"})
+                        var_ds = vars_ds[var].to_dataset(name=var)
+                        var_ds = var_ds.assign_coords({"lead_time": var_ds.time.values - np.datetime64(init_time)})
+                        var_ds = var_ds.set_index({"lead_time": "lead_time"})
                         
                         # save
                         path = f"forecast_{var}_" + "-".join([
@@ -252,42 +243,9 @@ def aurora_forecast(
                         path = os.path.join(output_dir, path)
                         verbose_print(verbose, f"   * Saving new {var_type} forecast: {path}")
                         xr_to_netcdf(
-                            sub_ds, path, 
+                            var_ds, path, 
                             precision="float32", 
                             compression_level=1, 
                             sort_time=False, 
                             exist_ok=True
                         )
-                    
-                    
-                    # # add lead time
-                    # vars_ds = vars_ds.assign_coords({"lead_time": vars_ds.time.values - np.datetime64(init_time)})
-                    # vars_ds = vars_ds.set_index({"lead_time": "lead_time"})
-                    
-                    # # TODO: aggregate desired timesteps to agg freq  
-                    # # vars_ds = vars_ds.resample(time=eval_aggregation).mean()  # not enough as it messes with "lead time"                    
-                    
-                    # # append to predictions
-                    # xr_preds[var_type].append(vars_ds)
-            
-    # # merge predictions and save
-    # for var_type, var_ds_list in xr_preds.items():
-    #     ds = xr.concat(var_ds_list, dim="time")#.rename(INVERTED_AURORA_VARIABLE_RENAMES[var_type])
-    #     verbose_print(verbose, f"Writing {var_type} predictions ...")
-    #     for lead_time in np.unique(ds.lead_time.values).astype("timedelta64[h]"):
-    #         for var in ds.data_vars:
-                
-    #             # TODO: lead time based on eval_aggregation??
-    #             lead_time = f"{lead_time}h"
-                
-    #             xr_to_netcdf(
-    #                 ds.sel(lead_time=lead_time)[var],
-    #                 os.path.join(
-    #                     output_dir,
-    #                     f"{var}-{start_year}-{end_year}-{era5_base_frequency}-{init_frequency}-{forecast_horizon}-{lead_time}-{resolution}.nc"
-    #                 ),
-    #                 precision="float32",
-    #                 compression_level=1,
-    #                 sort_time=False,
-    #                 exist_ok=True
-    #             )
