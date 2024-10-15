@@ -137,14 +137,15 @@ def aurora_forecast(
     verbose_print(verbose, f"Loaded dataset of length {len(dataset)} (drop_timestamps={drop_timestamps}, persist={persist}, rechunk={rechunk})")
     
     # create dataloader
-    num_workers = 1 #int(os.getenv('SLURM_CPUS_PER_TASK', 1))+2 if os.getenv('SLURM_CPUS_PER_TASK') is not None else os.cpu_count()+2
-    verbose_print(verbose, f"Creating DataLoader with {num_workers} workers ...")
-    eval_loader = DataLoader(
-        dataset, 
-        batch_size=batch_size, 
-        collate_fn=aurora_batch_collate_fn,
-        num_workers=num_workers,
-    )
+    # num_workers = 1 #int(os.getenv('SLURM_CPUS_PER_TASK', 1))+2 if os.getenv('SLURM_CPUS_PER_TASK') is not None else os.cpu_count()+2
+    # verbose_print(verbose, f"Creating DataLoader with {num_workers} workers ...")
+    # eval_loader = DataLoader(
+    #     dataset, 
+    #     batch_size=batch_size, 
+    #     collate_fn=aurora_batch_collate_fn,
+    #     num_workers=num_workers,
+    # )
+    verbose_print
     
     # model
     if "small" in aurora_model:
@@ -160,7 +161,10 @@ def aurora_forecast(
     verbose_print(verbose, f"Starting evaluation on {device}...")
     xr_preds = {"surface_ds": [], "atmospheric_ds": []}
     with torch.inference_mode() and torch.no_grad():
-        for i, batch in enumerate(eval_loader):
+        # for i, batch in enumerate(eval_loader):
+        verbose_print(verbose, f" EVALU WITHOUT DATALOADER !!! ...")
+        batch_size = 1
+        for i, batch in enumerate(dataset):
             batch = batch.to(device)
             # rollout until for forecast_steps
             verbose_print(verbose, f"Rollout prediction on batch {i} ...")
