@@ -16,9 +16,9 @@ era5_static_paths:
   - data/era5_wb2/2021-2022-6h-1440x721/z_static-1440x721.nc
   - data/era5_wb2/2021-2022-6h-1440x721/slt_static-1440x721.nc
 interest_variables:
-  - t2m
-  - u10
-  - v10
+  - 2t
+  - 10u
+  - 10v
   - u
   - v
   - z
