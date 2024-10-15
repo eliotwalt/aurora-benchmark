@@ -46,6 +46,8 @@ def xr_to_aurora_batch(
     atmospheric_variables: list[str]=AURORA_VARIABLE_NAMES["atmospheric"],
 ) -> Batch:
     """ 
+    Create an Aurora Batch from XR Datasets.
+    
     inspired by https://microsoft.github.io/aurora/example_era5.html
     and https://microsoft.github.io/aurora/example_hres_t0.html
     """ 
@@ -187,7 +189,17 @@ def aurora_batch_to_xr(batch: Batch, frequency: str) -> dict[str, xr.Dataset]:
         "static_ds": static_ds,
     }
 
-def aurora_batch_collate_fn(batches: list[Batch]) -> Batch:
+def aurora_batch_collate_fn(batches: list[Batch]|None) -> Batch:
+    # check input
+    _batches = batches.copy()
+    for i, batch in enumerate(_batches):
+        if batch is None: batches.pop(i)
+        elif not isinstance(batch, Batch):
+            raise ValueError(f"Expected a list of Aurora batches or NoneType, got {type(batch)}")
+    if len(batches) == 0:
+        return # nothing to batch return None
+    elif len(batches) == 1:
+        return batches[0] # nothing to batch return the single batch    
     # Prediction batches have a single time sample apparently
     times = []
     for batch in batches:
@@ -264,6 +276,7 @@ class XRAuroraDataset(Dataset):
         drop_timestamps: bool=False,
         rechunk: bool=False,
         persist: bool=False,
+        shuffle: bool=False,
     ) -> None:
         """
         Initialise the XRAuroraDataset.
@@ -313,6 +326,8 @@ class XRAuroraDataset(Dataset):
         self.pressure_levels = pressure_levels
         self.replacement_variables = replacement_variables        
         self.init_timestamps = self._get_init_timestamps()
+        if shuffle:
+            np.random.shuffle(self.init_timestamps)
         
         if drop_timestamps:
             flat_init_timestamps = np.unique(self.init_timestamps.flatten()).tolist()
@@ -391,68 +406,41 @@ class XRAuroraDataset(Dataset):
             atmospheric_variables=self.atmospheric_variables
         )
         
-if __name__ == "__main__":
-    # toy data to test the dataset
-    import numpy as np
-    import pandas as pd
-    from datetime import datetime
-    from xarray import DataArray, Dataset
-    from aurora import Batch, Metadata
-    
-    # create a toy dataset
-    time = pd.date_range(start="2020-01-01", end="2020-12-31", freq="6h")
-    num_longitudes = 1440 // 4
-    num_latitudes = 721 // 4
-    
-    surface_ds = Dataset(
-        {
-            "u10": DataArray(np.random.rand(len(time), num_latitudes, num_longitudes), dims=["time", "latitude", "longitude"]),
-            "v10": DataArray(np.random.rand(len(time), num_latitudes, num_longitudes), dims=["time", "latitude", "longitude"]),
-            "t2m": DataArray(np.random.rand(len(time), num_latitudes, num_longitudes), dims=["time", "latitude", "longitude"]),
-            "msl": DataArray(np.random.rand(len(time), num_latitudes, num_longitudes), dims=["time", "latitude", "longitude"]),
-            "sst": DataArray(np.random.rand(len(time), num_latitudes, num_longitudes), dims=["time", "latitude", "longitude"]),
-            "tp": DataArray(np.random.rand(len(time), num_latitudes, num_longitudes), dims=["time", "latitude", "longitude"]),
-        },
-        coords={"time": time, "latitude": np.linspace(-90, 90, num_latitudes), "longitude": np.linspace(-180, 180, num_longitudes)}
-    )
-    
-    atmospheric_ds = Dataset(
-        {
-            "t": DataArray(np.random.rand(len(time), num_latitudes, num_longitudes), dims=["time", "latitude", "longitude"]),
-            "u": DataArray(np.random.rand(len(time), num_latitudes, num_longitudes), dims=["time", "latitude", "longitude"]),
-            "v": DataArray(np.random.rand(len(time), num_latitudes, num_longitudes), dims=["time", "latitude", "longitude"]),
-            "q": DataArray(np.random.rand(len(time), num_latitudes, num_longitudes), dims=["time", "latitude", "longitude"]),
-            "z": DataArray(np.random.rand(len(time), num_latitudes, num_longitudes), dims=["time", "latitude", "longitude"]),
-        },
-        coords={"time": time, "latitude": np.linspace(-90, 90, num_latitudes), "longitude": np.linspace(-180, 180, num_longitudes)}
-    )
-    
-    static_ds = Dataset(
-        {
-            "z": DataArray(np.random.rand(num_latitudes, num_longitudes), dims=["latitude", "longitude"]),
-            "lsm": DataArray(np.random.rand(num_latitudes, num_longitudes), dims=["latitude", "longitude"]),
-            "stype": DataArray(np.random.rand(num_latitudes, num_longitudes), dims=["latitude", "longitude"]),
-        },
-        coords={"latitude": np.linspace(-90, 90, num_latitudes), "longitude": np.linspace(-180, 180, num_longitudes)}
-    )
-    
-    # create the dataset
-    dataset = XRAuroraDataset(
-        surface_ds=surface_ds,
-        atmospheric_ds=atmospheric_ds,
-        static_ds=static_ds,
-        init_frequency="1D",
-        forecast_horizon="2W",
-        num_time_samples=2, 
-    )
-    
-    print(f"Number of batches: {len(dataset)}")
-    
-    # sample a batch
-    batch = dataset[0]
-    
-    print(f"Batch metadata: {batch.metadata}")
-    
-    
-    
-    
+class XRAuroraBatchedDataset(XRAuroraDataset):
+    def __init__(
+        self,
+        batch_size: int,
+        *args, **kwargs
+    ) -> None:
+        """
+        Initialise the XRAuroraBatchedDataset.
+        
+        Args:
+            batch_size: int
+                The batch size.
+            *args, **kwargs:
+                Additional arguments to pass to the XRAuroraDataset.
+        """
+        super().__init__(*args, **kwargs)
+        self.batch_size = batch_size
+        
+    def __len__(self) -> int:
+        return super().__len__() // self.batch_size
+        
+    def __getitem__(self, k: int) -> Batch:
+        batch_timestamps = self.init_timestamps[k*self.batch_size:(k+1)*self.batch_size]
+        batch = None
+        
+        # TODO: xr_to_aurora_batch for batch_size > 1 would allow for parallelisation
+        #   i.e. no for loop.
+        
+        for bts in batch_timestamps:
+            batch = aurora_batch_collate_fn([batch, xr_to_aurora_batch(
+                self.surface_ds.sel(time=bts).compute(),
+                self.atmospheric_ds.sel(time=bts).compute(),
+                self.static_ds.compute(),
+                surface_variables=self.surface_variables,
+                static_variables=self.static_variables,
+                atmospheric_variables=self.atmospheric_variables
+            )])
+        return batch

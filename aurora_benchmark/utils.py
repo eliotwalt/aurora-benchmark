@@ -175,3 +175,56 @@ def rename_xr_variables(ds: xr.Dataset, variable_names_map: dict[str, str]) -> x
     renamed_ds = ds.rename(variable_names_map)
         
     return renamed_ds
+
+def update_running_statistics(
+    samples: np.ndarray,
+    mean: np.ndarray,
+    mean_of_squared: np.ndarray,
+    num_samples: int,
+    axis: int=0
+):
+    """
+    Compute running statistics given current ones and a new sample
+    
+    Args
+        samples: np.ndarray
+            new samples
+        mean: np.ndarray
+            current mean
+        mean_of_squared: np.ndarray
+            current mean of squared values
+        num_samples: int
+            current number of samples
+        axis: int
+            axis along which to compute the statistics (i.e. the samples
+            to be aggregated)
+    """
+    if axis is None:
+        # add an axis to the samples
+        samples = samples[np.newaxis]
+        axis = 0
+    
+    # update mean
+    mean = (mean * num_samples + samples.sum(axis)) / (num_samples + samples.shape[axis])
+    # update mean of squared values
+    mean_of_squared = (mean_of_squared * num_samples + (samples ** 2).sum(axis)) / (num_samples + samples.shape[axis])
+    # update number of samples
+    num_samples += samples.shape[axis]    
+    return mean, mean_of_squared, num_samples
+
+def reduce_statistics(statistics):
+    """
+    Reduce the running statistics to final statistics
+    
+    Args
+        statistics: dict
+            dictionary of running statistics
+    """
+    final_statistics = {}
+    for variable_name, stats in statistics.items():
+        final_statistics[variable_name] = {
+            "mean": stats["running_mean"],
+            "std": np.sqrt(stats["running_mean_of_squared"] - stats["running_mean"] ** 2),
+            "num_samples": stats["running_num_samples"]
+        }
+    return final_statistics
