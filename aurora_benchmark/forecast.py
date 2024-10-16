@@ -181,9 +181,10 @@ def aurora_forecast(
     with torch.inference_mode() and torch.no_grad():
         
         for i, batch in enumerate(eval_loader):
+            verbose_print(verbose,f"Rollout prediction on batch {i} ...")
+            if batch is None: continue
             batch = batch.to(device)
-            # rollout until for forecast_steps
-            verbose_print(verbose, f"Rollout prediction on batch {i} ...")
+            
             trajectories = [[] for _ in range(batch_size)]
             for s, batch_pred in enumerate(rollout(model, batch, steps=forecast_steps)):
                 if s < warmup_steps:
