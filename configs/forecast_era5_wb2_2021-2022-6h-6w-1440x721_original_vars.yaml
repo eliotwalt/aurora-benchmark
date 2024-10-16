@@ -40,5 +40,5 @@ persist: false
 verbose: true
 use_dataloader: false
 
-output_dir: data/era5_wb2_forecasts/2021-2022-6h-1d-6w-1440x721_original_variables/
+output_dir: data/era5_wb2_forecasts/2021-2022-6h-1w-6w-1440x721_original_variables/
 #                        ... {era6_freq}-{init_freq}-{forecast_horizon} ...

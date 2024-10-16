@@ -92,6 +92,11 @@ def aurora_forecast(
     # dask
     time_chunk = 10 * batch_size
     
+    if batch_size > 1:
+        # TODO: Fix batch processing        
+        
+        raise NotImplementedError("Batch size > 1 not yet implemented.")
+    
     # load xr data
     verbose_print(verbose, "Reading data ...")
     surface_ds = xr.merge(

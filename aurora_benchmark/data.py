@@ -371,7 +371,7 @@ class XRAuroraDataset(Dataset):
         # remove samples that do not allow for at least forecast horizon supervised steps
         timestamps = timestamps[timestamps < timestamps[-1] - pd.Timedelta(self.forecast_horizon)]
 
-        # keep only the timesteps at every [init_frequency + k] for k = 1 to num time samples
+        # reshape according to num_time_samples
         valid_timestamps = np.concatenate([
             pd.date_range(
                 start=timestamps[k],
@@ -380,7 +380,20 @@ class XRAuroraDataset(Dataset):
             for k in range(self.num_time_samples)
         ], axis=1)
         
-        return valid_timestamps
+        # "resample" to init freqency
+        # TODO: this could be done more efficiently, e.g. directly in the
+        #      pd.date_range function
+        init_timestamps = []
+        for index, t in enumerate(valid_timestamps):
+            if index == 0:
+                init_timestamps.append(t)
+            elif pd.Timedelta(t[0]-init_timestamps[-1][0]) >= pd.Timedelta(self.init_frequency):
+                init_timestamps.append(t)
+            else:
+                continue
+        init_timestamps = np.vstack(init_timestamps)
+        
+        return init_timestamps
     
     @classmethod
     def from_cloud_storage(cls, zarr_url: str, **kwargs) -> None:
