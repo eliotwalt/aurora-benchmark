@@ -251,6 +251,32 @@ def signed_difference_maps(
             plt.savefig(f"{eval_dir}/signed_differences_{variable_name}_{label}.png", dpi=300, bbox_inches='tight')
             plt.show()
             
+def find_closest_files(
+    forecast_dir: str,
+    target_time: pd.Timestamp,
+    variables: list[str]=None
+):
+    files = list(sorted(os.scandir(forecast_dir), key=lambda x: x.name))
+    min_diff = None
+    closest_files = None
+    closest_indexes = None
+    for i, file in enumerate(files):
+        file_info = file.name.replace(".nc", "").split("_")
+        variable_name = file_info[1]
+        if variables is not None and variable_name not in variables:
+            continue
+        file_info = file_info[2].split("-")
+        init_time = pd.Timestamp(file_info[0])
+        diff = abs(init_time - target_time)
+        if min_diff is None or diff < min_diff:
+            min_diff = diff
+            closest_files = [file]
+            closest_indexes = [i]
+        elif diff == min_diff:
+            closest_files.append(file)
+            closest_indexes.append(i)
+    return closest_indexes, closest_files
+            
 def get_matching_datasets(
     path: str,
     atmospheric_ds: xr.Dataset,
@@ -313,6 +339,7 @@ def prediction_maps(
     eval_dir: str,
     file_index: int=None,
     lead_times: list[pd.Timedelta]=None,
+    level: int=None
 ):
 
     # define med
@@ -322,7 +349,7 @@ def prediction_maps(
     }
     
     # get file list
-    files = list(os.scandir(forecast_dir))
+    files = list(sorted(os.scandir(forecast_dir), key=lambda x: x.name))
     if file_index is None:
         file_index = np.random.randint(0, len(files))
     file = files[file_index]
@@ -353,6 +380,13 @@ def prediction_maps(
     pred_trajectory_med = pred_trajectory.sel(med_region)
     true_trajectory_med = true_trajectory.sel(med_region)
     signed_error_ds_med = signed_error_ds.sel(med_region)
+    
+    if variable_name in atmospheric_ds.data_vars:
+        atmospheric = True
+        assert level is not None 
+        variable_name = f"{variable_name}_{level}"
+    else:
+        atmospheric = False
     
     for (pred, true, error), region in [
         ([pred_trajectory, true_trajectory, signed_error_ds], "global"),
@@ -386,6 +420,7 @@ def prediction_maps(
 
         for i in range(axs.shape[1]-1):
             lead_time = pred.lead_time.values[i]
+            
             # prediction
             ax = axs[0, i]
             ax.set_extent(bounds, crs=ccrs.PlateCarree())
@@ -401,7 +436,8 @@ def prediction_maps(
             # Remove ticks and labels|
             # Plot the first variable in the dataset
             d = pred.sel(lead_time=lead_time)[var]
-            print(type(d), d.dims, d.shape)
+            if atmospheric:
+                d = d.sel(level=level)
             pred_imgs.append(d.plot(
                 ax=ax,
                 transform=ccrs.PlateCarree(),
@@ -420,6 +456,7 @@ def prediction_maps(
             else: 
                 ax.set_ylabel("")
                 ax.set_yticks([], crs=ccrs.PlateCarree())
+                
             # ground truth
             ax = axs[1, i]
             ax.set_extent(bounds, crs=ccrs.PlateCarree())
@@ -435,6 +472,8 @@ def prediction_maps(
             # Remove ticks and labels|
             # Plot the first variable in the dataset
             d = true.sel(lead_time=lead_time)
+            if atmospheric:
+                d = d.sel(level=level)
             true_imgs.append(d.plot(
                 ax=ax,
                 transform=ccrs.PlateCarree(),
@@ -452,6 +491,7 @@ def prediction_maps(
             else: 
                 ax.set_ylabel("")
                 ax.set_yticks([], crs=ccrs.PlateCarree())
+                
             # differences
             ax = axs[2, i]
             ax.set_extent(bounds, crs=ccrs.PlateCarree())
@@ -467,6 +507,8 @@ def prediction_maps(
             # Remove ticks and labels|
             # Plot the first variable in the dataset
             d = error.sel(lead_time=lead_time)[var]
+            if atmospheric:
+                d = d.sel(level=level)
             diff_imgs.append(d.plot(
                 ax=ax,
                 transform=ccrs.PlateCarree(),
@@ -489,7 +531,7 @@ def prediction_maps(
         fig.colorbar(true_imgs[-1], ax=axs[1, -1], orientation='vertical', extend="both", fraction=.8, shrink=.8)
         fig.colorbar(diff_imgs[-1], ax=axs[2, -1], orientation='vertical', extend="both", fraction=.8, shrink=.8)
                 
-        fig.suptitle(f"Prediction, ground truth and signed error for {var} on {init_time} ({region})\n(base_frequency={base_frequency}, eval_aggregation={eval_aggregation}, eval_start={eval_start}, forecast_horizon={forecast_horizon})")    
+        fig.suptitle(f"Prediction, ground truth and signed error for {variable_name} on {init_time} ({region})\n(base_frequency={base_frequency}, eval_aggregation={eval_aggregation}, eval_start={eval_start}, forecast_horizon={forecast_horizon})")    
         fig.tight_layout()
-        fig.savefig(f"{eval_dir}/prediction_maps_{var}_{region}_{init_time.strftime('%Y%m%dT%H%M%S')}.png", dpi=300, bbox_inches='tight')
+        fig.savefig(f"{eval_dir}/prediction_maps_{variable_name}_{region}_{init_time.strftime('%Y%m%dT%H%M%S')}.png", dpi=300, bbox_inches='tight')
         fig.show()
