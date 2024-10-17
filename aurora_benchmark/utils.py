@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import os
 import logging
+from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
@@ -177,55 +178,48 @@ def rename_xr_variables(ds: xr.Dataset, variable_names_map: dict[str, str]) -> x
         
     return renamed_ds
 
-def update_running_statistics(
-    samples: np.ndarray,
-    mean: np.ndarray,
-    mean_of_squared: np.ndarray,
-    num_samples: int,
-    axis: int=0
-):
-    """
-    Compute running statistics given current ones and a new sample
-    
-    Args
-        samples: np.ndarray
-            new samples
-        mean: np.ndarray
-            current mean
-        mean_of_squared: np.ndarray
-            current mean of squared values
-        num_samples: int
-            current number of samples
-        axis: int
-            axis along which to compute the statistics (i.e. the samples
-            to be aggregated)
-    """
-    if axis is None:
-        # add an axis to the samples
-        samples = samples[np.newaxis]
-        axis = 0
-    
-    # update mean
-    mean = (mean * num_samples + samples.sum(axis)) / (num_samples + samples.shape[axis])
-    # update mean of squared values
-    mean_of_squared = (mean_of_squared * num_samples + (samples ** 2).sum(axis)) / (num_samples + samples.shape[axis])
-    # update number of samples
-    num_samples += samples.shape[axis]    
-    return mean, mean_of_squared, num_samples
+class Statistics(object):
+    def __init__(self):
+        self.samples = None
+        self._means_cached = False
+        self._stds_cached = False
 
-def reduce_statistics(statistics):
-    """
-    Reduce the running statistics to final statistics
+    def update(self, sample_ds: xr.Dataset):
+        if self.samples is None:
+            self.samples = sample_ds
+        else:
+            self.samples = xr.concat([self.samples, sample_ds], dim="time")
+        # Invalidate cached results
+        self._invalidate_cache()
+
+    def _invalidate_cache(self):
+        if self._means_cached:
+            self.means.fget.cache_clear()
+            self._means_cached = False
+        if self._stds_cached:
+            self.stds.fget.cache_clear()
+            self._stds_cached = False
+
+    @property
+    @lru_cache(maxsize=None)
+    def stds(self):
+        self._stds_cached = True
+        return self.samples.std(dim="time").persist()
     
-    Args
-        statistics: dict
-            dictionary of running statistics
-    """
-    final_statistics = {}
-    for variable_name, stats in statistics.items():
-        final_statistics[variable_name] = {
-            "mean": stats["running_mean"],
-            "std": np.sqrt(stats["running_mean_of_squared"] - stats["running_mean"] ** 2),
-            "num_samples": stats["running_num_samples"]
-        }
-    return final_statistics
+    @property
+    @lru_cache(maxsize=None)
+    def means(self):
+        self._means_cached = True
+        return self.samples.mean(dim="time").persist()
+    
+    def rmse(self, dim=["latitude", "longitude"], reduce="mean"):
+        if reduce == "mean":
+            return np.sqrt(((self.samples**2).mean(dim=dim)).persist())
+        elif reduce == "std":
+            return np.sqrt(((self.samples**2).std(dim=dim)).persist())
+        else:
+            raise ValueError(f"Unknown reduce method {reduce}")
+    
+    @property
+    def variables(self):
+        return list(self.samples.data_vars)

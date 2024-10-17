@@ -9,10 +9,10 @@ source ./env/venv_gpu/bin/activate
 
 # download data with python script
 sbatch --cpus-per-task=16 \
-    --gpus=4 \
-    --mem=96G \
+    --gpus=6 \
+    --mem=256G \
     --job-name=fc_era5_wb2 \
-    --partition=gpu_a100 \
+    --partition=gpu_h100 \
     --time=120:00:00 \
     --output=./logs/forecast/%j.out \
     --error=./logs/forecast/%j.out \

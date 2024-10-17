@@ -130,7 +130,7 @@ def aurora_forecast(
             verbose_print(verbose, "Loading Aurora model ...")
             model = Aurora(use_lora=False)
         model.load_checkpoint("microsoft/aurora", aurora_model)
-        model = model.to(device)
+    model = model.to(device)
     
     # load xr data
     verbose_print(verbose, "Reading data ...")
