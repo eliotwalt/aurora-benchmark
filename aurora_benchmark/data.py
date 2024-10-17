@@ -8,6 +8,8 @@ from aurora import Batch, Metadata
 import logging
 import warnings
 import math
+from copy import deepcopy
+from torch.nn.parallel._functions import Scatter, Gather
 
 from aurora_benchmark.utils import verbose_print
 
@@ -244,7 +246,7 @@ def unpack_aurora_batch(batch: Batch) -> list[Batch]:
             metadata=Metadata(
                 lat=batch.metadata.lat,
                 lon=batch.metadata.lon,
-                time=batch.metadata.time[b],
+                time=(batch.metadata.time[b],),
                 atmos_levels=batch.metadata.atmos_levels,
             )
         )
@@ -433,22 +435,31 @@ class XRAuroraBatchedDataset(XRAuroraDataset):
         """
         super().__init__(*args, **kwargs)
         self.batch_size = batch_size
+        self.flat_init_timestamps = self.init_timestamps.copy()
+        # add None to the init_timestamps to ensure that the last batch is not cut off
+        if len(self.init_timestamps) % self.batch_size != 0:
+            self.init_timestamps = np.concatenate([
+                self.init_timestamps,
+                np.full((self.batch_size - len(self.init_timestamps) % self.batch_size, self.num_time_samples), None, dtype="datetime64[s]")
+            ])
+        self.init_timestamps = self.init_timestamps.reshape(-1, self.batch_size, self.num_time_samples)
         
-    def flat_length(self):
-        return self.init_timestamps.shape[0]
+    def flat_length(self) -> int:
+        return self.flat_init_timestamps.shape[0]
         
     def __len__(self) -> int:
-        return math.ceil(self.init_timestamps.shape[0] / self.batch_size)
+        return self.init_timestamps.shape[0]
         
     def __getitem__(self, k: int) -> Batch:
-        if k == -1: k = self.__len__() - 1
-        batch_timestamps = self.init_timestamps[k*self.batch_size:(k+1)*self.batch_size]
+        batch_timestamps = self.init_timestamps[k]
         batches = []
         
         # TODO: xr_to_aurora_batch for batch_size > 1 would allow for parallelisation
         #   i.e. no for loop.
         
         for bts in batch_timestamps:
+            if pd.isnull(bts).any():
+                continue
             batches.append(xr_to_aurora_batch(
                 self.surface_ds.sel(time=bts).compute(),
                 self.atmospheric_ds.sel(time=bts).compute(),
@@ -458,3 +469,88 @@ class XRAuroraBatchedDataset(XRAuroraDataset):
                 atmospheric_variables=self.atmospheric_variables
             ))
         return aurora_batch_collate_fn(batches)
+    
+def aurora_batch_scatter(batch: Batch, kwargs: dict|None, device_ids: list[int|torch.device]) -> list[Batch]:
+    B = batch.surf_vars[list(batch.surf_vars.keys())[0]].shape[0]
+    # scatter every sub tensor
+    surf_vars = {
+        var: Scatter.apply(device_ids, None, 0, batch.surf_vars[var])
+        for var in batch.surf_vars.keys()
+    }
+    atmos_vars = {
+        var: Scatter.apply(device_ids, None, 0, batch.atmos_vars[var])
+        for var in batch.atmos_vars.keys()
+    }
+    static_vars = {
+        var: Scatter.apply(device_ids, None, 0, batch.static_vars[var].unsqueeze(0).repeat(B, 1, 1))
+        for var in batch.static_vars.keys()
+    }
+    scattered_batches = []
+    n_batches = len(surf_vars[list(surf_vars.keys())[0]])
+    current_index = 0
+    for i in range(n_batches):
+        # get variables
+        sub_surf_vars = {var: surf_vars[var][i] for var in surf_vars.keys()}
+        sub_atmos_vars = {var: atmos_vars[var][i] for var in atmos_vars.keys()}
+        sub_static_vars = {var: static_vars[var][i].squeeze(0) for var in static_vars.keys()}
+        # get sub batch size
+        sub_batch_size = sub_surf_vars[list(sub_surf_vars.keys())[0]].shape[0]
+        # get metadata
+        metadata = deepcopy(batch.metadata)
+        # ensure get the correct timesteps
+        metadata.time = metadata.time[current_index:current_index+sub_batch_size]
+        current_index += sub_batch_size
+        # create new batch
+        new_batch = Batch(
+            surf_vars=sub_surf_vars,
+            atmos_vars=sub_atmos_vars,
+            static_vars=sub_static_vars,
+            metadata=metadata,
+        )
+        scattered_batches.append(new_batch)
+    scattered_kwargs = [{} for _ in scattered_batches]
+    return scattered_batches, scattered_kwargs
+
+def aurora_batch_gather(outputs: list[Batch], output_device: int|torch.device) -> Batch:
+    # gather every sub tensor
+    surf_vars = {
+        var: Gather.apply(
+            output_device, 
+            0, 
+            *[batch.surf_vars[var] for batch in outputs])
+        for var in outputs[0].surf_vars.keys()
+    }
+    atmos_vars = {
+        var: Gather.apply(
+            output_device, 
+            0, 
+            *[batch.atmos_vars[var] for batch in outputs])
+        for var in outputs[0].atmos_vars.keys()
+    }
+    static_vars = { # pass through Gather to ensure correct device then select the first "batch"
+        var: Gather.apply(
+            output_device, 
+            0, 
+            *[batch.static_vars[var].unsqueeze(0) for batch in outputs])[0].squeeze(0)
+        for var in outputs[0].static_vars.keys()
+    }
+    # gather metadata
+    times = []
+    for batch in outputs:
+        time = batch.metadata.time
+        if isinstance(time, tuple):
+            times.append(time[0])
+        else:
+            times.append(time)        
+    metadata = deepcopy(outputs[0].metadata)
+    metadata.time = tuple(times)
+    metadata.lat = metadata.lat.to(output_device)
+    metadata.lon = metadata.lon.to(output_device)
+    # build Batch
+    gathered_batch = Batch(
+        surf_vars=surf_vars,
+        atmos_vars=atmos_vars,
+        static_vars=static_vars,
+        metadata=metadata,
+    )
+    return gathered_batch

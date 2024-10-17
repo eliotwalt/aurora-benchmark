@@ -27,6 +27,7 @@ interest_variables:
 interest_levels:
   - 250
   - 500
+  - 1000
 batch_size: 1
 era5_base_frequency: 6h
 init_frequency: 1w
@@ -40,5 +41,5 @@ persist: false
 verbose: true
 use_dataloader: false
 
-output_dir: data/era5_wb2_forecasts/2021-2022-6h-1w-6w-1440x721_original_variables/
+output_dir: data/era5_wb2_forecasts/2021-2022-6h-1w-6w-1440x721_orig_vars/
 #                        ... {era6_freq}-{init_freq}-{forecast_horizon} ...

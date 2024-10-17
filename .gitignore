@@ -17,6 +17,7 @@ snellius.yaml
 toy_data/
 tmp_data/ 
 data/
+figures/
 *.nc
 
 *.draft.*

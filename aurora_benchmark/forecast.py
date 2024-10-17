@@ -6,8 +6,10 @@ import pandas as pd
 from torch.utils.data import DataLoader
 import numpy as np
 import logging
+import dataclasses
+from typing import Generator
 
-from aurora import Aurora, AuroraSmall, rollout
+from aurora import Aurora, AuroraSmall,Batch
 
 from aurora_benchmark.utils import verbose_print, xr_to_netcdf
 from aurora_benchmark.data import (
@@ -15,7 +17,7 @@ from aurora_benchmark.data import (
     XRAuroraBatchedDataset,
     aurora_batch_collate_fn, 
     aurora_batch_to_xr, 
-    unpack_aurora_batch
+    unpack_aurora_batch,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,6 +42,54 @@ INVERTED_AURORA_VARIABLE_RENAMES = {
     "atmospheric": {v: k for k, v in AURORA_VARIABLE_RENAMES["atmospheric"].items()},
     "static": {v: k for k, v in AURORA_VARIABLE_RENAMES["static"].items()},
 }    
+
+def rollout(model: Aurora, batch: Batch, steps: int) -> Generator[Batch, None, None]:
+    """Perform a roll-out to make long-term predictions.
+
+    Args:
+        model (:class:`aurora.model.aurora.Aurora`): The model to roll out.
+        batch (:class:`aurora.batch.Batch`): The batch to start the roll-out from.
+        steps (int): The number of roll-out steps.
+
+    Yields:
+        :class:`aurora.batch.Batch`: The prediction after every step.
+    """
+    # We will need to concatenate data, so ensure that everything is already of the right form.
+    # Use an arbitrary parameter of the model to derive the data type and device.
+    p = next(model.parameters())
+    batch = batch.type(p.dtype)
+    
+    # Access the underlying model if DataParallel is used
+    if isinstance(model, torch.nn.DataParallel):
+        patch_size = model.module.patch_size
+    else:
+        patch_size = model.patch_size
+    
+    batch = batch.crop(patch_size)
+    batch = batch.to(p.device)
+
+    for _ in range(steps):
+        
+        print(f"Step {_}: batch.surf_vars = {batch.surf_vars}, batch.atmos_vars = {batch.atmos_vars}")
+        
+        pred = model.forward(batch)
+
+        print(f"Step {_}: pred.surf_vars = {pred.surf_vars}, pred.atmos_vars = {pred.atmos_vars}")
+        
+        yield pred
+
+        # Add the appropriate history so the model can be run on the prediction.
+        batch = dataclasses.replace(
+            pred,
+            surf_vars={
+                k: torch.cat([batch.surf_vars[k][:, 1:], v], dim=1)
+                for k, v in pred.surf_vars.items()
+            },
+            atmos_vars={
+                k: torch.cat([batch.atmos_vars[k][:, 1:], v], dim=1)
+                for k, v in pred.atmos_vars.items()
+            },
+        )
 
 def aurora_forecast(
     era5_surface_paths: list[str],
