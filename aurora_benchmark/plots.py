@@ -1,3 +1,5 @@
+import os
+import xarray as xr
 import pandas as pd
 import numpy as np
 import seaborn as sns
@@ -9,6 +11,8 @@ from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 import math
 
 from aurora_benchmark.utils import Statistics
+
+np.random.seed(0)
 
 sns.set_theme(
     style="whitegrid",
@@ -138,7 +142,7 @@ def rmse_curves(
 
     if std_plot:
         fig_curves_stds.tight_layout()
-        fig_curves_stds.savefig(f"{eval_dir}/rmse_curves_stds.png")
+        fig_curves_stds.savefig(f"{eval_dir}/rmse_curves_stds.png", dpi=300, bbox_inches='tight')
         fig_curves_stds.show()
 
 def signed_difference_maps(
@@ -244,5 +248,248 @@ def signed_difference_maps(
             
             fig_diffs.suptitle(f"Signed differences for {variable_name} ({label})")
             plt.tight_layout()
-            plt.savefig(f"{eval_dir}/signed_differences_{variable_name}_{label}.png", dpi=300)
+            plt.savefig(f"{eval_dir}/signed_differences_{variable_name}_{label}.png", dpi=300, bbox_inches='tight')
             plt.show()
+            
+def get_matching_datasets(
+    path: str,
+    atmospheric_ds: xr.Dataset,
+    surface_ds: xr.Dataset,
+    variable_name: str,
+    init_time: pd.Timestamp,
+    eval_aggregation: str,
+    eval_start: str,
+    forecast_horizon: str,
+):
+    pred_trajectory = xr.open_dataset(path, engine="netcdf4")
+    assert pd.Timedelta((pred_trajectory.lead_time[1]-pred_trajectory.lead_time[0]).values) == pd.Timedelta(eval_aggregation)
+
+    # load ERA5 gt from surface_ds and atmospheric_ds
+    true_ds = atmospheric_ds if variable_name in atmospheric_ds.data_vars else surface_ds
+    true_trajectory = true_ds[variable_name]\
+            .sel(time=slice(init_time+pd.Timedelta(eval_start), init_time+pd.Timedelta(forecast_horizon)))
+
+    # resample gt to eval_aggregation
+    true_trajectory = true_trajectory.resample(time=pd.Timedelta(eval_aggregation), origin=init_time).mean()
+    assert pd.Timedelta((true_trajectory.time[1]-true_trajectory.time[0]).values) == pd.Timedelta(eval_aggregation)
+
+    # rename true time to lead time
+    true_trajectory = true_trajectory.rename({"time": "lead_time"})
+    true_trajectory["lead_time"] = true_trajectory["lead_time"] - np.datetime64(init_time)
+
+    # shape
+    sizes = pred_trajectory.sizes
+    nlt = len(np.unique(pred_trajectory.lead_time.values))
+    if variable_name in atmospheric_ds.data_vars:
+        stat_key = "atmospheric_vars"
+    else:
+        stat_key = "surface_vars"
+        
+    # compute signed error
+    error = (pred_trajectory - true_trajectory)
+    
+    # ensure [-180, 180] longitude 
+    if true_trajectory.longitude.max() > 180:
+        true_trajectory = true_trajectory.assign_coords({"longitude": true_trajectory.longitude.values-180})
+    if pred_trajectory.longitude.max() > 180:
+        pred_trajectory = pred_trajectory.assign_coords({"longitude": pred_trajectory.longitude.values-180})
+    if error.longitude.max() > 180:
+        error = error.assign_coords({"longitude": error.longitude.values-180})
+        
+    # flip latitude of true and and errpr
+    if true_trajectory.latitude.values[0] < true_trajectory.latitude.values[1]: # i.e. if latitude is increasing
+        true_trajectory = true_trajectory.assign_coords({"latitude": true_trajectory.latitude.values[::-1]})
+    if error.latitude.values[0] < error.latitude.values[1]: # i.e. if latitude is increasing
+        error = error.assign_coords({"latitude": error.latitude.values[::-1]})
+    if pred_trajectory.latitude.values[0] < pred_trajectory.latitude.values[1]: # i.e. if latitude is increasing
+        pred_trajectory = pred_trajectory.assign_coords({"latitude": pred_trajectory.latitude.values[::-1]})
+
+    return pred_trajectory, true_trajectory, error
+            
+def prediction_maps(
+    forecast_dir: str,
+    atmospheric_ds: xr.Dataset,
+    surface_ds: xr.Dataset,
+    eval_dir: str,
+    file_index: int=None,
+    lead_times: list[pd.Timedelta]=None,
+):
+
+    # define med
+    med_region = {    
+        "latitude": slice(47, 29), 
+        "longitude": slice(-8, 38) 
+    }
+    
+    # get file list
+    files = list(os.scandir(forecast_dir))
+    if file_index is None:
+        file_index = np.random.randint(0, len(files))
+    file = files[file_index]
+    
+    # get info
+    file_info = file.name.replace(".nc", "").split("_")
+    variable_name = file_info[1]
+    file_info = file_info[2].split("-")
+    init_time = pd.Timestamp(file_info[0])
+    base_frequency = file_info[1]
+    eval_aggregation = file_info[2]
+    eval_start = file_info[3]
+    forecast_horizon = file_info[4] 
+    
+    print(f"Plotting {file.name}")
+    
+    # open prediction file
+    pred_trajectory, true_trajectory, signed_error_ds = get_matching_datasets(
+        file.path, atmospheric_ds, surface_ds,
+        variable_name, init_time, eval_aggregation, eval_start, forecast_horizon    
+    )
+    if lead_times is not None:
+        pred_trajectory = pred_trajectory.sel(lead_time=lead_times)
+        true_trajectory = true_trajectory.sel(lead_time=lead_times)
+        signed_error_ds = signed_error_ds.sel(lead_time=lead_times)
+    
+    # get med data
+    pred_trajectory_med = pred_trajectory.sel(med_region)
+    true_trajectory_med = true_trajectory.sel(med_region)
+    signed_error_ds_med = signed_error_ds.sel(med_region)
+    
+    for (pred, true, error), region in [
+        ([pred_trajectory, true_trajectory, signed_error_ds], "global"),
+        ([pred_trajectory_med, true_trajectory_med, signed_error_ds_med], "MED"),
+    ]:        
+        fig, axs = plt.subplots(ncols=len(pred.lead_time.values)+1, 
+                                nrows=3, 
+                                figsize=(2.5*len(pred.lead_time.values), 5),
+                                gridspec_kw={"width_ratios": [1 for _ in pred.lead_time.values] + [0.05]},
+                                subplot_kw={'projection': ccrs.PlateCarree()})
+
+        var = list(pred.data_vars)[0]
+
+        vmin = np.min([pred[var].min(), true.min()])
+        vmax = np.max([pred[var].max(), true.max()])
+
+        v = np.max([np.abs(error[var].max()), np.abs(error[var].min())])
+
+        pred_imgs = []
+        true_imgs = []
+        diff_imgs = []
+
+        if true.longitude.max() > 180:
+            true = true.assign_coords({"longitude": true.longitude.values-180})
+            pred = pred.assign_coords({"longitude": pred.longitude.values-180})
+            error = error.assign_coords({"longitude": error.longitude.values-180})
+            
+        bounds = [true.longitude.min().item(), true.longitude.max().item(), true.latitude.min().item(), true.latitude.max().item()]
+        longitudes = np.linspace(math.floor(bounds[0]), math.ceil(bounds[1]), 3)
+        latitudes = np.linspace(math.floor(bounds[2]), math.ceil(bounds[3]), 3)
+
+        for i in range(axs.shape[1]-1):
+            lead_time = pred.lead_time.values[i]
+            # prediction
+            ax = axs[0, i]
+            ax.set_extent(bounds, crs=ccrs.PlateCarree())
+            ax.add_feature(cfeature.COASTLINE)
+            ax.add_feature(cfeature.BORDERS, linestyle=':') 
+            gl = ax.gridlines(draw_labels=False, rotate_labels=90)  # Disable gridline labels
+            gl.xlabels_top = False
+            gl.ylabels_right = False
+            gl.xlocator = mticker.FixedLocator(longitudes)
+            gl.ylocator = mticker.FixedLocator(latitudes)
+            gl.xformatter = LONGITUDE_FORMATTER
+            gl.yformatter = LATITUDE_FORMATTER
+            # Remove ticks and labels|
+            # Plot the first variable in the dataset
+            d = pred.sel(lead_time=lead_time)[var]
+            print(type(d), d.dims, d.shape)
+            pred_imgs.append(d.plot(
+                ax=ax,
+                transform=ccrs.PlateCarree(),
+                cmap='viridis',
+                vmin=vmin,
+                vmax=vmax,
+                add_colorbar=False
+            ))
+            lt = int(pd.Timedelta(lead_time) / pd.Timedelta("1w"))
+            ax.set_title(f"Lead time: {lt} week(s)")
+            ax.set_xlabel("")
+            ax.set_xticks([], crs=ccrs.PlateCarree())
+            if i==0: 
+                ax.set_ylabel("latitude")
+                ax.set_yticks(latitudes, crs=ccrs.PlateCarree())
+            else: 
+                ax.set_ylabel("")
+                ax.set_yticks([], crs=ccrs.PlateCarree())
+            # ground truth
+            ax = axs[1, i]
+            ax.set_extent(bounds, crs=ccrs.PlateCarree())
+            ax.add_feature(cfeature.COASTLINE)
+            ax.add_feature(cfeature.BORDERS, linestyle=':') 
+            gl = ax.gridlines(draw_labels=False, rotate_labels=90)  # Disable gridline labels
+            gl.xlabels_top = False
+            gl.ylabels_right = False
+            gl.xlocator = mticker.FixedLocator(longitudes)
+            gl.ylocator = mticker.FixedLocator(latitudes)
+            gl.xformatter = LONGITUDE_FORMATTER
+            gl.yformatter = LATITUDE_FORMATTER
+            # Remove ticks and labels|
+            # Plot the first variable in the dataset
+            d = true.sel(lead_time=lead_time)
+            true_imgs.append(d.plot(
+                ax=ax,
+                transform=ccrs.PlateCarree(),
+                cmap='viridis',
+                vmin=vmin,
+                vmax=vmax,
+                add_colorbar=False
+            ))
+            ax.set_title("")
+            ax.set_xlabel("")
+            ax.set_xticks([], crs=ccrs.PlateCarree())
+            if i==0: 
+                ax.set_ylabel("latitude")
+                ax.set_yticks(latitudes, crs=ccrs.PlateCarree())
+            else: 
+                ax.set_ylabel("")
+                ax.set_yticks([], crs=ccrs.PlateCarree())
+            # differences
+            ax = axs[2, i]
+            ax.set_extent(bounds, crs=ccrs.PlateCarree())
+            ax.add_feature(cfeature.COASTLINE)
+            ax.add_feature(cfeature.BORDERS, linestyle=':') 
+            gl = ax.gridlines(draw_labels=False, rotate_labels=90)  # Disable gridline labels
+            gl.xlabels_top = False
+            gl.ylabels_right = False
+            gl.xlocator = mticker.FixedLocator(longitudes)
+            gl.ylocator = mticker.FixedLocator(latitudes)
+            gl.xformatter = LONGITUDE_FORMATTER
+            gl.yformatter = LATITUDE_FORMATTER
+            # Remove ticks and labels|
+            # Plot the first variable in the dataset
+            d = error.sel(lead_time=lead_time)[var]
+            diff_imgs.append(d.plot(
+                ax=ax,
+                transform=ccrs.PlateCarree(),
+                cmap='coolwarm',
+                vmin=-v,
+                vmax=v,
+                add_colorbar=False # Remove individual colorbars
+            ))
+            ax.set_title("")
+            ax.set_xlabel("longitude")
+            ax.set_xticks(longitudes, crs=ccrs.PlateCarree())
+            if i==0: 
+                ax.set_ylabel("latitude")
+                ax.set_yticks(latitudes, crs=ccrs.PlateCarree())
+            else: 
+                ax.set_ylabel("")
+                ax.set_yticks([], crs=ccrs.PlateCarree())
+                
+        fig.colorbar(pred_imgs[-1], ax=axs[0, -1], orientation='vertical', extend="both", fraction=.8, shrink=.8)
+        fig.colorbar(true_imgs[-1], ax=axs[1, -1], orientation='vertical', extend="both", fraction=.8, shrink=.8)
+        fig.colorbar(diff_imgs[-1], ax=axs[2, -1], orientation='vertical', extend="both", fraction=.8, shrink=.8)
+                
+        fig.suptitle(f"Prediction, ground truth and signed error for {var} on {init_time} ({region})\n(base_frequency={base_frequency}, eval_aggregation={eval_aggregation}, eval_start={eval_start}, forecast_horizon={forecast_horizon})")    
+        fig.tight_layout()
+        fig.savefig(f"{eval_dir}/prediction_maps_{var}_{region}_{init_time.strftime('%Y%m%dT%H%M%S')}.png", dpi=300, bbox_inches='tight')
+        fig.show()

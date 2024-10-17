@@ -9,7 +9,7 @@ source ./env/venv_gpu/bin/activate
 
 # download data with python script
 sbatch --cpus-per-task=16 \
-    --gpus=6 \
+    --gpus=4 \
     --mem=256G \
     --job-name=fc_era5_wb2 \
     --partition=gpu_h100 \
