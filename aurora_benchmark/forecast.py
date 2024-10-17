@@ -1,4 +1,4 @@
-import os 
+import os
 import xarray as xr
 import torch
 import dask
@@ -7,17 +7,18 @@ from torch.utils.data import DataLoader
 import numpy as np
 import logging
 import dataclasses
-from typing import Generator
 
-from aurora import Aurora, AuroraSmall,Batch
+from aurora import Batch, Aurora, AuroraSmall
 
 from aurora_benchmark.utils import verbose_print, xr_to_netcdf
+
+from aurora_benchmark.parallel import AuroraBatchDataParallel, rollout, ParallelAurora, ParallelAuroraSmall
 from aurora_benchmark.data import (
     XRAuroraDataset, 
     XRAuroraBatchedDataset,
     aurora_batch_collate_fn, 
     aurora_batch_to_xr, 
-    unpack_aurora_batch,
+    unpack_aurora_batch
 )
 
 logger = logging.getLogger(__name__)
@@ -43,54 +44,6 @@ INVERTED_AURORA_VARIABLE_RENAMES = {
     "static": {v: k for k, v in AURORA_VARIABLE_RENAMES["static"].items()},
 }    
 
-def rollout(model: Aurora, batch: Batch, steps: int) -> Generator[Batch, None, None]:
-    """Perform a roll-out to make long-term predictions.
-
-    Args:
-        model (:class:`aurora.model.aurora.Aurora`): The model to roll out.
-        batch (:class:`aurora.batch.Batch`): The batch to start the roll-out from.
-        steps (int): The number of roll-out steps.
-
-    Yields:
-        :class:`aurora.batch.Batch`: The prediction after every step.
-    """
-    # We will need to concatenate data, so ensure that everything is already of the right form.
-    # Use an arbitrary parameter of the model to derive the data type and device.
-    p = next(model.parameters())
-    batch = batch.type(p.dtype)
-    
-    # Access the underlying model if DataParallel is used
-    if isinstance(model, torch.nn.DataParallel):
-        patch_size = model.module.patch_size
-    else:
-        patch_size = model.patch_size
-    
-    batch = batch.crop(patch_size)
-    batch = batch.to(p.device)
-
-    for _ in range(steps):
-        
-        print(f"Step {_}: batch.surf_vars = {batch.surf_vars}, batch.atmos_vars = {batch.atmos_vars}")
-        
-        pred = model.forward(batch)
-
-        print(f"Step {_}: pred.surf_vars = {pred.surf_vars}, pred.atmos_vars = {pred.atmos_vars}")
-        
-        yield pred
-
-        # Add the appropriate history so the model can be run on the prediction.
-        batch = dataclasses.replace(
-            pred,
-            surf_vars={
-                k: torch.cat([batch.surf_vars[k][:, 1:], v], dim=1)
-                for k, v in pred.surf_vars.items()
-            },
-            atmos_vars={
-                k: torch.cat([batch.atmos_vars[k][:, 1:], v], dim=1)
-                for k, v in pred.atmos_vars.items()
-            },
-        )
-
 def aurora_forecast(
     era5_surface_paths: list[str],
     era5_atmospheric_paths: list[str],
@@ -98,7 +51,7 @@ def aurora_forecast(
     interest_variables: list[str],
     interest_levels: list[str],
     output_dir: str,
-    batch_size: int=4,
+    batch_size: int=1,
     replacement_variables: dict[str, str]=dict(),
     era5_base_frequency: str="6h",
     init_frequency: str="1d",
@@ -111,9 +64,12 @@ def aurora_forecast(
     drop_timestamps: bool=False,
     persist: bool=False,
     verbose: bool=True,
-    use_dataloader: bool=False
+    use_dataloader: bool=False,
+    data_parallel: bool=False,
 ):     
-    os.makedirs(output_dir, exist_ok=True)
+    # no override!
+    os.makedirs(output_dir, exist_ok=False)
+    verbose_print(verbose, f"Forecasts output dir: {output_dir}")
     
     # compute additional arguments
     warmup_steps = pd.Timedelta(eval_start) / pd.Timedelta(era5_base_frequency) if eval_start is not None else 0.0
@@ -132,6 +88,12 @@ def aurora_forecast(
     assert forecast_steps.is_integer(), f"forecast_horizon not a multiple of frequency"
     assert warmup_steps.is_integer(), f"eval_start not a multiple of frequency"
     assert (forecast_steps-warmup_steps) * pd.Timedelta(era5_base_frequency) >= pd.Timedelta(eval_aggregation), "Evaluation steps must be at least as long as eval_aggregation" 
+    if data_parallel and device == "cpu":
+        verbose_print(verbose, "DataParallel requires GPUs. Using single CPU ...")
+        data_parallel = False
+    if data_parallel and torch.cuda.device_count()<=1:
+        verbose_print(verbose, "DataParallel requires multiple GPUs. Using single GPU ...")
+        data_parallel = False
     forecast_steps = int(forecast_steps)
     warmup_steps = int(warmup_steps)
     
@@ -140,32 +102,52 @@ def aurora_forecast(
         raise NotImplementedError("Replacement variables not yet implemented.")
     
     # dask
-    time_chunk = 10 * batch_size
+    time_chunk = 50 * batch_size
     
+    # batch_size safety
     if batch_size > 1:
         # TODO: Fix batch processing        
         
         raise NotImplementedError("Batch size > 1 not yet implemented.")
     
+    # model
+    if data_parallel:
+        if "small" in aurora_model:
+            verbose_print(verbose, f"Loading ParallelAuroraSmall model with {torch.cuda.device_count()} GPUs...")
+            model = ParallelAuroraSmall()
+        else:
+            verbose_print(verbose, f"Loading ParallelAurora model with {torch.cuda.device_count()} GPUs...")
+            model = ParallelAurora(use_lora=False)
+        model.load_checkpoint("microsoft/aurora", aurora_model)
+        model = AuroraBatchDataParallel(model)
+        verbose_print(verbose, f"Adjusting batch size for DataParallel ({batch_size} batch(es)/GPU)...")
+        batch_size *= torch.cuda.device_count()
+    else:
+        if "small" in aurora_model:
+            verbose_print(verbose, "Loading AuroraSmall model ...")
+            model = AuroraSmall()
+        else:
+            verbose_print(verbose, "Loading Aurora model ...")
+            model = Aurora(use_lora=False)
+        model.load_checkpoint("microsoft/aurora", aurora_model)
+        model = model.to(device)
+    
     # load xr data
     verbose_print(verbose, "Reading data ...")
     surface_ds = xr.merge(
         [xr.open_dataset(path, engine="netcdf4", 
-                         chunks={"time": time_chunk, "latitude": 721, "longitude": 1440},
-                         )#backend_kwargs={'diskless': True, 'persist': False}) 
+                         chunks={"time": time_chunk, "latitude": 721, "longitude": 1440})#backend_kwargs={'diskless': True, 'persist': False}) 
          for path in era5_surface_paths],
-    )#.rename(AURORA_VARIABLE_RENAMES["surface"])
+    )
     atmospheric_ds = xr.merge(
         [xr.open_dataset(path, engine="netcdf4",
-                         chunks={"time": time_chunk, "latitude": 721, "longitude": 1440, "level": 7},
-                         )#backend_kwargs={'diskless': True, 'persist': False}) 
+                         chunks={"time": time_chunk, "latitude": 721, "longitude": 1440, "level": 1})#backend_kwargs={'diskless': True, 'persist': False}) 
          for path in era5_atmospheric_paths],
-    )#.rename(AURORA_VARIABLE_RENAMES["atmospheric"])
+    )
     static_ds = xr.merge(
-        [xr.open_dataset(path, engine="netcdf4",
-                         )#backend_kwargs={'diskless': True, 'persist': False})
+        [xr.open_dataset(path, engine="netcdf4")#backend_kwargs={'diskless': True, 'persist': False})
          for path in era5_static_paths],
-    )#.rename(AURORA_VARIABLE_RENAMES["static"])
+    )
     
     # feedback dims
     verbose_print(verbose, f"surface_ds: {surface_ds.dims}")
@@ -216,18 +198,9 @@ def aurora_forecast(
     verbose_print(verbose, f"Dataset length: {dataset.flat_length() if hasattr(dataset, 'flat_length') else len(dataset)}")
     verbose_print(verbose, f"Dataloader length: {len(eval_loader)} (type: {type(eval_loader)}, batch_size: {batch_size})")  
     
-    # model
-    if "small" in aurora_model:
-        verbose_print(verbose, "Loading AuroraSmall model ...")
-        model = AuroraSmall()
-    else:
-        verbose_print(verbose, "Loading Aurora model ...")
-        model = Aurora(use_lora=False)
-    model.load_checkpoint("microsoft/aurora", aurora_model)
-    model = model.to(device)
-    
     # evaluation loop
-    verbose_print(verbose, f"Starting evaluation on {device}...")
+    devices = device if not data_parallel else [f"cuda:{i}" for i in range(torch.cuda.device_count())]
+    verbose_print(verbose, f"Starting evaluation on {devices}...")
     with torch.inference_mode() and torch.no_grad():
         
         for i, batch in enumerate(eval_loader):

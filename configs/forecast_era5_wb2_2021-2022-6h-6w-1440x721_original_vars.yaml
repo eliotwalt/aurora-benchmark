@@ -40,6 +40,7 @@ drop_timestamps: false
 persist: false
 verbose: true
 use_dataloader: false
+data_parallel: true
 
-output_dir: data/era5_wb2_forecasts/2021-2022-6h-1w-6w-1440x721_orig_vars/
+output_dir: data/era5_wb2_forecasts/2021-2022-6h-1w-6w-1440x721_original_variables_parallel/
 #                        ... {era6_freq}-{init_freq}-{forecast_horizon} ...
