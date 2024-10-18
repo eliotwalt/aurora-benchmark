@@ -1,0 +1,30 @@
+era5_surface_paths:
+  - data/era5_wb2/2021-2022-6h-1440x721/10v_2021-2022-6h-1440x721.nc
+  - data/era5_wb2/2021-2022-6h-1440x721/2t_2021-2022-6h-1440x721.nc
+#  - data/era5_wb2/2021-2022-6h-1440x721/tp_2021-2022-6h-1440x721.nc # original only
+  - data/era5_wb2/2021-2022-6h-1440x721/10u_2021-2022-6h-1440x721.nc
+  - data/era5_wb2/2021-2022-6h-1440x721/msl_2021-2022-6h-1440x721.nc
+#  - data/era5_wb2/2021-2022-6h-1440x721/sst_2021-2022-6h-1440x721.nc # original only
+era5_atmospheric_paths:
+  - data/era5_wb2/2021-2022-6h-1440x721/q_2021-2022-6h-1440x721.nc
+  - data/era5_wb2/2021-2022-6h-1440x721/t_2021-2022-6h-1440x721.nc
+  - data/era5_wb2/2021-2022-6h-1440x721/u_2021-2022-6h-1440x721.nc
+  - data/era5_wb2/2021-2022-6h-1440x721/v_2021-2022-6h-1440x721.nc
+  - data/era5_wb2/2021-2022-6h-1440x721/z_2021-2022-6h-1440x721.nc
+era5_static_paths:
+  - data/era5_wb2/2021-2022-6h-1440x721/lsm_static-1440x721.nc
+  - data/era5_wb2/2021-2022-6h-1440x721/z_static-1440x721.nc
+  - data/era5_wb2/2021-2022-6h-1440x721/slt_static-1440x721.nc
+
+variables: 
+  - 2t
+  - msl 
+  - u_250
+  - v_250
+
+dates:
+  - 2021-11-15
+  - 2021-06-10
+
+forecast_dir: data/era5_wb2_forecasts/2021-2022-6h-1w-6w-1440x721_original_variables_parallel
+eval_dir: figures/era5_wb2_eval/2021-2022-6h-1w-6w-1440x721_original_variables/

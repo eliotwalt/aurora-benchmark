@@ -246,7 +246,7 @@ def signed_difference_maps(
             cbar = fig_diffs.colorbar(imgs[0], ax=axes_diffs, orientation='horizontal', extend='both', shrink=0.5,
                                     anchor=(0.5, -1.8), aspect=50)
             
-            fig_diffs.suptitle(f"Signed differences for {variable_name} ({label})")
+            fig_diffs.suptitle(f"Average signed differences for {variable_name} ({label})")
             plt.tight_layout()
             plt.savefig(f"{eval_dir}/signed_differences_{variable_name}_{label}.png", dpi=300, bbox_inches='tight')
             plt.show()
@@ -531,7 +531,7 @@ def prediction_maps(
         fig.colorbar(true_imgs[-1], ax=axs[1, -1], orientation='vertical', extend="both", fraction=.8, shrink=.8)
         fig.colorbar(diff_imgs[-1], ax=axs[2, -1], orientation='vertical', extend="both", fraction=.8, shrink=.8)
                 
-        fig.suptitle(f"Prediction, ground truth and signed error for {variable_name} on {init_time} ({region})\n(base_frequency={base_frequency}, eval_aggregation={eval_aggregation}, eval_start={eval_start}, forecast_horizon={forecast_horizon})")    
+        fig.suptitle(f"Prediction, ground truth and signed error for {variable_name} initialised at {init_time} ({region})\n(base_frequency={base_frequency}, eval_aggregation={eval_aggregation}, eval_start={eval_start}, forecast_horizon={forecast_horizon})")    
         fig.tight_layout()
         fig.savefig(f"{eval_dir}/prediction_maps_{variable_name}_{region}_{init_time.strftime('%Y%m%dT%H%M%S')}.png", dpi=300, bbox_inches='tight')
         fig.show()

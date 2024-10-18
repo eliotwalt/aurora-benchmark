@@ -181,8 +181,8 @@ def rename_xr_variables(ds: xr.Dataset, variable_names_map: dict[str, str]) -> x
 class Statistics(object):
     def __init__(self):
         self.samples = None
-        self._means_cached = False
-        self._stds_cached = False
+        #self._means_cached = False
+        #self._stds_cached = False
 
     def update(self, sample_ds: xr.Dataset):
         if self.samples is None:
@@ -190,33 +190,33 @@ class Statistics(object):
         else:
             self.samples = xr.concat([self.samples, sample_ds], dim="time")
         # Invalidate cached results
-        self._invalidate_cache()
+        #self._invalidate_cache()
 
-    def _invalidate_cache(self):
-        if self._means_cached:
-            self.means.fget.cache_clear()
-            self._means_cached = False
-        if self._stds_cached:
-            self.stds.fget.cache_clear()
-            self._stds_cached = False
+    # def _invalidate_cache(self):
+    #     if self._means_cached:
+    #         self.means.fget.cache_clear()
+    #         self._means_cached = False
+    #     if self._stds_cached:
+    #         self.stds.fget.cache_clear()
+    #         self._stds_cached = False
 
     @property
-    @lru_cache(maxsize=None)
+    #@lru_cache(maxsize=None)
     def stds(self):
-        self._stds_cached = True
-        return self.samples.std(dim="time").persist()
+        #self._stds_cached = True
+        return self.samples.std(dim="time")#.persist()
     
     @property
-    @lru_cache(maxsize=None)
+    #@lru_cache(maxsize=None)
     def means(self):
-        self._means_cached = True
-        return self.samples.mean(dim="time").persist()
+        #self._means_cached = True
+        return self.samples.mean(dim="time")#.persist()
     
     def rmse(self, dim=["latitude", "longitude"], reduce="mean"):
         if reduce == "mean":
-            return np.sqrt(((self.samples**2).mean(dim=dim)).persist())
+            return np.sqrt(((self.samples**2).mean(dim=dim)))#.persist())
         elif reduce == "std":
-            return np.sqrt(((self.samples**2).std(dim=dim)).persist())
+            return np.sqrt(((self.samples**2).std(dim=dim)))#.persist())
         else:
             raise ValueError(f"Unknown reduce method {reduce}")
     
