@@ -28,6 +28,7 @@ def rmse_curves(
     eval_dir: str,
     nrows: int=4,
     variables: list[str]=None,
+    units: list[str]=None,
     std_plot: bool=False,
 ):
     if variables is None or len(variables) == 0:
@@ -59,6 +60,11 @@ def rmse_curves(
             stat_key = "atmospheric_vars"
             var, level = var.split("_")
             level = float(level)
+            
+        # ax title
+        axtitle = f"{variable_name}"
+        if units is not None: axtitle += f" [{units[i]}]"    
+            
         # compute rmses
         global_rmse = global_statistics[stat_key].rmse(dim=["time", "latitude", "longitude"])[var]
         med_rmse = med_statistics[stat_key].rmse(dim=["time", "latitude", "longitude"])[var]
@@ -88,7 +94,7 @@ def rmse_curves(
             [global_rmse_std, med_rmse_std, med_wet_rmse_std, med_dry_rmse_std],
             ["Global", "MED", "MED wet season", "MED dry season"]
         ):
-            lead_times = [pd.Timedelta(lt)/pd.Timedelta("1w") for lt in rmse.lead_time.values]
+            lead_times = [pd.Timedelta(lt)/pd.Timedelta("1w")+1 for lt in rmse.lead_time.values]
             # without stds
             axc = axes_curves.flat[i]
             axc.plot(
@@ -96,7 +102,7 @@ def rmse_curves(
                 rmse,
                 label=label
             )
-            axc.set_title(f"{variable_name}")
+            axc.set_title(axtitle)
             if i % (len(all_vars) // nrows) == 0:
                 axc.set_ylabel("RMSE")
             if i >= len(all_vars) - (len(all_vars) // nrows):
@@ -116,7 +122,7 @@ def rmse_curves(
                     rmse + rmse_std,
                     alpha=0.2
                 )
-                axs.set_title(f"{variable_name}")
+                axs.set_title(axtitle)
                 if i % (len(all_vars) // nrows) == 0:
                     axs.set_ylabel("RMSE")
                 if i >= len(all_vars) - (len(all_vars) // nrows):
@@ -152,6 +158,7 @@ def signed_difference_maps(
     med_dry_statistics: Statistics,
     eval_dir: str,
     variables: list[str]=None,
+    units: list[str]=None,
 ):
     if variables is None or len(variables) == 0:
         all_vars = global_statistics["surface_vars"].variables
@@ -161,7 +168,7 @@ def signed_difference_maps(
     else:
         all_vars = variables
 
-    for i, var in enumerate(all_vars):
+    for k, var in enumerate(all_vars):
         # get key
         variable_name = var
         if var in global_statistics["surface_vars"].variables:
@@ -224,7 +231,7 @@ def signed_difference_maps(
                 ))
                 
                 lt = int(pd.Timedelta(lead_time) / pd.Timedelta("1w"))
-                ax.set_title(f"Lead time: {lt} week(s)")
+                ax.set_title(f"Week {lt+1}")
                 
                 ax.set_xticks(longitudes, crs=ccrs.PlateCarree())
                 ax.set_yticks(latitudes, crs=ccrs.PlateCarree())
@@ -244,7 +251,7 @@ def signed_difference_maps(
             
             # Add a single colorbar
             cbar = fig_diffs.colorbar(imgs[0], ax=axes_diffs, orientation='horizontal', extend='both', shrink=0.5,
-                                    anchor=(0.5, -1.8), aspect=50)
+                                    anchor=(0.5, -1.8), aspect=50, label=f"[{units[k]}]" if units is not None else "")
             
             fig_diffs.suptitle(f"Average signed differences for {variable_name} ({label})")
             plt.tight_layout()
@@ -342,6 +349,8 @@ def prediction_maps(
     level: int=None
 ):
 
+    if not isinstance(level, int): level = int(level)
+    
     # define med
     med_region = {    
         "latitude": slice(47, 29), 
@@ -387,6 +396,7 @@ def prediction_maps(
         variable_name = f"{variable_name}_{level}"
     else:
         atmospheric = False
+    print("Variable name:", variable_name)
     
     for (pred, true, error), region in [
         ([pred_trajectory, true_trajectory, signed_error_ds], "global"),
@@ -447,11 +457,11 @@ def prediction_maps(
                 add_colorbar=False
             ))
             lt = int(pd.Timedelta(lead_time) / pd.Timedelta("1w"))
-            ax.set_title(f"Lead time: {lt} week(s)")
+            ax.set_title(f"Week {lt+1}")
             ax.set_xlabel("")
             ax.set_xticks([], crs=ccrs.PlateCarree())
             if i==0: 
-                ax.set_ylabel("latitude")
+                ax.set_ylabel("Aurora\nlatitude")
                 ax.set_yticks(latitudes, crs=ccrs.PlateCarree())
             else: 
                 ax.set_ylabel("")
@@ -472,6 +482,7 @@ def prediction_maps(
             # Remove ticks and labels|
             # Plot the first variable in the dataset
             d = true.sel(lead_time=lead_time)
+            units = d.units
             if atmospheric:
                 d = d.sel(level=level)
             true_imgs.append(d.plot(
@@ -486,7 +497,7 @@ def prediction_maps(
             ax.set_xlabel("")
             ax.set_xticks([], crs=ccrs.PlateCarree())
             if i==0: 
-                ax.set_ylabel("latitude")
+                ax.set_ylabel("ERA5\nlatitude")
                 ax.set_yticks(latitudes, crs=ccrs.PlateCarree())
             else: 
                 ax.set_ylabel("")
@@ -521,15 +532,15 @@ def prediction_maps(
             ax.set_xlabel("longitude")
             ax.set_xticks(longitudes, crs=ccrs.PlateCarree())
             if i==0: 
-                ax.set_ylabel("latitude")
+                ax.set_ylabel("Signed error\nlatitude")
                 ax.set_yticks(latitudes, crs=ccrs.PlateCarree())
             else: 
                 ax.set_ylabel("")
                 ax.set_yticks([], crs=ccrs.PlateCarree())
                 
-        fig.colorbar(pred_imgs[-1], ax=axs[0, -1], orientation='vertical', extend="both", fraction=.8, shrink=.8)
-        fig.colorbar(true_imgs[-1], ax=axs[1, -1], orientation='vertical', extend="both", fraction=.8, shrink=.8)
-        fig.colorbar(diff_imgs[-1], ax=axs[2, -1], orientation='vertical', extend="both", fraction=.8, shrink=.8)
+        fig.colorbar(pred_imgs[-1], ax=axs[0, -1], orientation='vertical', extend="both", fraction=.8, shrink=.8, label=f"[{units}]")
+        fig.colorbar(true_imgs[-1], ax=axs[1, -1], orientation='vertical', extend="both", fraction=.8, shrink=.8, label=f"[{units}]")
+        fig.colorbar(diff_imgs[-1], ax=axs[2, -1], orientation='vertical', extend="both", fraction=.8, shrink=.8, label=f"[{units}]")
                 
         fig.suptitle(f"Prediction, ground truth and signed error for {variable_name} initialised at {init_time} ({region})\n(base_frequency={base_frequency}, eval_aggregation={eval_aggregation}, eval_start={eval_start}, forecast_horizon={forecast_horizon})")    
         fig.tight_layout()

@@ -20,6 +20,17 @@ np.random.seed(0)
 
 dask.config.set(scheduler='threads')
 
+def get_variable_units(variables, surface_ds, atmospheric_ds):
+    units = []
+    for var in variables:
+        if "_" in var:
+            var = var.split("_")[0]
+        if var in surface_ds.data_vars:
+            units.append(surface_ds[var].units)
+        else:
+            units.append(atmospheric_ds[var].units)
+    return units
+
 def open_era5_files(
     era5_surface_paths: list[str],
     era5_atmospheric_paths: list[str],
@@ -174,6 +185,25 @@ def average_statistics_plots(
         forecast_dir, surface_ds, atmospheric_ds, verbose
     )
     
+    variable_units = get_variable_units(variables, surface_ds, atmospheric_ds)
+    
+    signed_difference_maps(
+        global_statistics,
+        med_statistics,
+        med_wet_statistics,
+        med_dry_statistics,
+        eval_dir=eval_dir,
+        variables=variables,
+        units=variable_units,
+    )
+    
+    # use all variables for rmse curves
+    all_vars = global_statistics["surface_vars"].variables
+    for var in global_statistics["atmospheric_vars"].variables:
+        for level in global_statistics["atmospheric_vars"].means[var].level.values:
+            all_vars.append(f"{var}_{int(level)}")
+    variable_units = get_variable_units(all_vars, surface_ds, atmospheric_ds)
+    
     rmse_curves(
         global_statistics,
         med_statistics,
@@ -183,16 +213,8 @@ def average_statistics_plots(
         std_fig_title=f"RMSE (with std shading) for base_frequency={base_frequency}, eval_aggregation={eval_aggregation}, eval_start={eval_start}, forecast_horizon={forecast_horizon}",
         eval_dir=eval_dir,
         nrows=4,
-        std_plot=True
-    )
-    
-    signed_difference_maps(
-        global_statistics,
-        med_statistics,
-        med_wet_statistics,
-        med_dry_statistics,
-        eval_dir=eval_dir,
-        variables=variables,
+        std_plot=True,
+        units=variable_units,
     )
     
 def predictions_plots(

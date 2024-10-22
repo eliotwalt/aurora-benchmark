@@ -53,6 +53,7 @@ if __name__ == "__main__":
             if "_" in var
         ]))
         assert len(eval_config["level"]) == 1, "Only one level is supported for predictions atm"
+        eval_config["level"] = eval_config["level"][0]
          
         eval_config["variables"] = list(set([
             var.split("_")[0] if "_" in var else var
